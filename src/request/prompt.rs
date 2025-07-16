@@ -6,6 +6,7 @@ use std::{
     path::PathBuf,
     sync::RwLock,
 };
+use crate::config::Config;
 
 #[derive(Clone, Debug)]
 pub struct Prompt {
@@ -97,28 +98,51 @@ impl Prompt {
 
     /// format to chat kind prompt.
     pub fn to_chatgpt_message(&self) -> Vec<ChatCompletionRequestMessage> {
+        let config = config::get_config();
         let ctx = get_combination_definitions(&self.gadgets);
-        let sys_msg = get_sys_gen_message(ctx);
-        log::trace!("System role: {sys_msg}");
-        let user_msg = config::get_user_chat_template()
-            .replace("{combinations}", &combination_to_str(&self.gadgets));
-        let sys_msg = ChatCompletionRequestSystemMessageArgs::default()
-            .content(sys_msg)
-            .build().unwrap()
-            .into();
-        let user_msg = ChatCompletionRequestUserMessageArgs::default()
-            .content(user_msg)
-            .build().unwrap()
-            .into();
-        vec![sys_msg, user_msg]
+        
+        if config.generation_mode == config::GenerationModeP::FuzzDriver {
+            log::debug!("Using FuzzDriver generation mode");
+            let sys_msg = get_sys_gen_message(ctx, &config);
+            log::trace!("System role: {sys_msg}");
+            let user_msg = config::get_user_chat_template()
+                .replace("{combinations}", &combination_to_str(&self.gadgets));
+            let sys_msg = ChatCompletionRequestSystemMessageArgs::default()
+                .content(sys_msg)
+                .build().unwrap()
+                .into();
+            let user_msg = ChatCompletionRequestUserMessageArgs::default()
+                .content(user_msg)
+                .build().unwrap()
+                .into();
+            vec![sys_msg, user_msg]
+        } else {
+            log::debug!("Using ApiCombination generation mode");
+            let sys_msg = get_sys_gen_message(ctx,&config);
+              // 也使用带上下文的消息
+            let user_msg = config::get_user_gen_template()
+                .replace("{combinations}", &combination_to_str(&self.gadgets));
+            let sys_msg = ChatCompletionRequestSystemMessageArgs::default()
+                .content(sys_msg)
+                .build().unwrap()
+                .into();
+            let user_msg = ChatCompletionRequestUserMessageArgs::default()
+                .content(user_msg)
+                .build().unwrap()
+                .into();
+            vec![sys_msg, user_msg]
+        }
     }
-
 }
 
 /// get the message of the system role for generative tasks.
-pub fn get_sys_gen_message(ctx: String) -> String {
+pub fn get_sys_gen_message(ctx: String, config: &Config) -> String {
     let deopt = Deopt::new(get_library_name()).unwrap();
-    let mut template = config::SYSTEM_GEN_TEMPLATE.to_string();
+    let mode = config.generation_mode.clone();
+    let mut template = match mode {
+        config::GenerationModeP::FuzzDriver => config::SYSTEM_GEN_TEMPLATE.to_string(),
+        config::GenerationModeP::ApiCombination => config::SYSTEM_API_TEMPLATE.to_string(),
+    };
     let mut ctx_template = config::SYSTEM_CONTEXT_TEMPLATE.replace("{project}", &get_library_name());
     if let Some(desc) = deopt.config.desc {
         ctx_template.insert_str(0, &desc);
@@ -128,7 +152,6 @@ pub fn get_sys_gen_message(ctx: String) -> String {
     let ctx_template = ctx_template.replace("{context}", &ctx);
     template.push_str("\n\n");
     template.push_str(&ctx_template);
-
     template
 }
 

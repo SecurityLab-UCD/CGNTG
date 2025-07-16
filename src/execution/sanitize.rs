@@ -13,7 +13,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
-
+use std::io::Write;
 use self::utils::cleanup_sanitize_dir;
 
 use super::{
@@ -153,7 +153,46 @@ impl Executor {
         }
         Ok(None)
     }
-
+    pub fn validate_api_sequence(
+        &self,
+        program: &Program,
+        deopt: &Deopt,
+    ) -> Result<Option<ProgramError>> {
+        // write the program to a temp file.
+        let temp_path=deopt.get_work_seed_by_id(program.id)?;
+        if let Some(parent) = temp_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut temp_file= std::fs::File::create(&temp_path)?;
+        write!(temp_file,"{}",crate::deopt::utils::format_library_header_strings(deopt))?;
+        write!(temp_file,"#include <iostream>\n")?;
+        write!(temp_file,"#include <stdio.h>\n")?;
+        let project_name=get_library_name();
+        writeln!(temp_file,"{}", program.statements)?;
+        writeln!(temp_file, "int main() {{")?;
+        writeln!(temp_file,"test_{}_api_sequence();", project_name)?;
+        writeln!(temp_file, "    return 0;")?;
+        writeln!(temp_file, "}}")?;
+        drop(temp_file);
+        // check the program syntax and link correctness.
+        if let Some(err)=self.is_program_syntax_correct(&temp_path)? {
+            return Ok(Some(err));
+        }
+        if let Some(err) = self.is_program_link_correct(&temp_path)? {
+            return Ok(Some(err));
+        }
+        // execute the program to check whether it is correct.
+        let binary_out=temp_path.with_extension("out");
+        let output = Command::new(&binary_out)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()?;
+        if !output.status.success() {
+            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            return Ok(Some(ProgramError::Execute(err_msg)));
+        }
+        Ok(None)
+    }
     pub fn check_programs_are_correct(
         &self,
         programs: &[Program],

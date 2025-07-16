@@ -207,12 +207,18 @@ impl Fuzzer {
         } else {
             Prompt::from_combination(initial_combination)
         };
+
+
+
+
         let mut loop_cnt = 0;
         let mut has_checked = false;
 
         self.sync_from_previous_state(&mut logger)?;
 
-        loop {
+        if get_config().generation_mode==config::GenerationModeP::FuzzDriver{
+            log::info!("Using FuzzDriver mode, initial prompt: {prompt:?}");
+            loop {
             if self.is_converge() {
                 break;
             }
@@ -256,6 +262,14 @@ impl Fuzzer {
                 self.quiet_round,
                 self.observer.dump_global_states()
             );
+            }
+        } else if get_config().generation_mode==config::GenerationModeP::ApiCombination{
+            log::info!("Using api combination mode, initial prompt: {prompt:?}");
+            loop {
+            if self.is_converge() {
+                break;
+        
+            }}
         }
         log::info!("Global branch states converged!");
         minimize(&self.deopt)?;
