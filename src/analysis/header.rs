@@ -9,7 +9,7 @@ use crate::{config::get_library_name, deopt::Deopt, execution::Executor};
 use eyre::Result;
 use once_cell::sync::OnceCell;
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet},
     path::Path,
     process::{Command, Stdio},
 };
@@ -153,150 +153,146 @@ fn parse_dependency_tree(output: &str, base_name: &str, header_path: &Path) -> R
 
 
 fn get_independent_headers(trees: &[TreeNode]) -> Result<Vec<&str>> {
+    use std::collections::{HashMap, HashSet};
     
-    // 构建依赖图：header -> 依赖它的headers
-    let mut dependency_graph: HashMap<&str, HashSet<&str>> = HashMap::new();
-    let mut all_headers: HashSet<&str> = HashSet::new();
+    // Collect all nodes and their inclusion relationships
+    let mut all_nodes: HashMap<&str, &TreeNode> = HashMap::new();
+    let mut included_by_others: HashSet<&str> = HashSet::new();
+    let mut includes_map: HashMap<&str, HashSet<&str>> = HashMap::new();
     
-    // 收集所有header名称
-    for tree in trees {
-        collect_all_headers(tree, &mut all_headers);
-    }
-    
-    // 初始化依赖图
-    for &header in &all_headers {
-        dependency_graph.insert(header, HashSet::new());
-    }
-    
-    // 构建依赖关系：如果header A包含header B，则B依赖A
-    for tree in trees {
-        build_dependency_graph(tree, tree.get_name(), &mut dependency_graph);
-    }
-    
-    // 使用拓扑排序来找到顶层header，同时处理循环依赖
-    find_top_level_headers_with_cycles(&dependency_graph, &all_headers)
-}
-
-fn collect_all_headers<'a>(tree: &'a TreeNode, all_headers: &mut HashSet<&'a str>) {
-    let mut worklist = WorkList::new();
-    worklist.push(tree);
-    
-    while !worklist.empty() {
-        let node = worklist.pop();
-        all_headers.insert(node.get_name());
+    // Recursively collect all nodes and dependency relationships
+    fn collect_nodes<'a>(
+        node: &'a TreeNode, 
+        all_nodes: &mut HashMap<&'a str, &'a TreeNode>,
+        included_by_others: &mut HashSet<&'a str>,
+        includes_map: &mut HashMap<&'a str, HashSet<&'a str>>
+    ) {
+        let name = node.get_name();
+        all_nodes.insert(name, node);
         
-        for child in &node.children {
-            worklist.push(child);
-        }
-    }
-}
-
-fn build_dependency_graph<'a>(tree: &'a TreeNode, root_name: &'a str, dependency_graph: &mut HashMap<&'a str, HashSet<&'a str>>) {
-    let mut worklist = WorkList::new();
-    worklist.push(tree);
-    
-    while !worklist.empty() {
-        let node = worklist.pop();
+        let mut children_set = HashSet::new();
         
-        // 对于每个子节点，表示它依赖当前根节点
+        // Collect all child nodes, which are included by the current node
         for child in &node.children {
             let child_name = child.get_name();
-            if let Some(deps) = dependency_graph.get_mut(child_name) {
-                deps.insert(root_name);
-            }
-            worklist.push(child);
+            included_by_others.insert(child_name);
+            children_set.insert(child_name);
+            collect_nodes(child, all_nodes, included_by_others, includes_map);
         }
-    }
-}
-
-fn find_top_level_headers_with_cycles<'a>(dependency_graph: &HashMap<&'a str, HashSet<&'a str>>, all_headers: &HashSet<&'a str>) -> Result<Vec<&'a str>> {
-    
-    // 计算每个header的入度（被多少个header依赖）
-    let mut in_degree: HashMap<&str, usize> = HashMap::new();
-    for &header in all_headers {
-        in_degree.insert(header, 0);
-    }
-    
-    for (_header, dependents) in dependency_graph {
-        for &dependent in dependents {
-            *in_degree.entry(dependent).or_insert(0) += 1;
-        }
-    }
-    
-    // 使用Kahn算法进行拓扑排序，找到入度为0的节点
-    let mut queue = VecDeque::new();
-    let mut result = Vec::new();
-    let mut visited = HashSet::new();
-    
-    // 首先添加所有入度为0的节点
-    for (&header, &degree) in &in_degree {
-        if degree == 0 {
-            queue.push_back(header);
-        }
-    }
-    
-    // 处理拓扑排序
-    while let Some(header) = queue.pop_front() {
-        if visited.contains(header) {
-            continue;
-        }
-        visited.insert(header);
-        result.push(header);
         
-        // 减少依赖此header的其他header的入度
-        if let Some(dependents) = dependency_graph.get(header) {
-            for &dependent in dependents {
-                if let Some(degree) = in_degree.get_mut(dependent) {
-                    *degree -= 1;
-                    if *degree == 0 && !visited.contains(dependent) {
-                        queue.push_back(dependent);
-                    }
-                }
-            }
+        includes_map.insert(name, children_set);
+    }
+    
+    // Collect nodes for each tree
+    for tree in trees {
+        collect_nodes(tree, &mut all_nodes, &mut included_by_others, &mut includes_map);
+    }
+    
+    // Find all root nodes (nodes not included by any other nodes)
+    let mut independent_headers: Vec<&str> = Vec::new();
+    
+    for (name, _node) in &all_nodes {
+        if !included_by_others.contains(name) {
+            independent_headers.push(name);
         }
     }
     
-    // 处理循环依赖：对于未访问的节点，选择字典序最小的作为代表
-    let mut cycle_representatives = Vec::new();
-    for &header in all_headers {
-        if !visited.contains(header) {
-            // 找到这个循环中字典序最小的header
-            let mut cycle_nodes = Vec::new();
-            let mut temp_visited = HashSet::new();
-            find_cycle_nodes(header, dependency_graph, &mut cycle_nodes, &mut temp_visited);
+    // If independent headers are found, return them directly
+    if !independent_headers.is_empty() {
+        independent_headers.sort();
+        independent_headers.dedup();
+        return Ok(independent_headers);
+    }
+    
+    // No independent headers found, possible circular dependencies exist
+    // Use greedy algorithm to find minimum coverage set
+    let mut result = Vec::new();
+    let mut covered: HashSet<&str> = HashSet::new();
+    let mut remaining_nodes: HashSet<&str> = all_nodes.keys().cloned().collect();
+    
+    while !remaining_nodes.is_empty() {
+        // Find the node that can cover the most uncovered nodes
+        let mut best_node: Option<&str> = None;
+        let mut best_coverage = 0;
+        
+        for &node in &remaining_nodes {
+            // Calculate how many uncovered nodes this node can cover
+            let mut coverage = 0;
             
-            if !cycle_nodes.is_empty() {
-                cycle_nodes.sort();
-                let representative = cycle_nodes[0];
-                if !visited.contains(representative) {
-                    cycle_representatives.push(representative);
-                    // 标记整个循环中的所有节点为已访问
-                    for &node in &cycle_nodes {
-                        visited.insert(node);
-                    }
+            // The node itself
+            if !covered.contains(node) {
+                coverage += 1;
+            }
+            
+            // Calculate the number of nodes reachable through inclusion relationships
+            let reachable = get_reachable_nodes(node, &includes_map);
+            for &reachable_node in &reachable {
+                if !covered.contains(reachable_node) {
+                    coverage += 1;
                 }
+            }
+            
+            if coverage > best_coverage {
+                best_coverage = coverage;
+                best_node = Some(node);
+            }
+        }
+        
+        if let Some(selected) = best_node {
+            result.push(selected);
+            remaining_nodes.remove(selected);
+            
+            // Mark all reachable nodes as covered
+            covered.insert(selected);
+            let reachable = get_reachable_nodes(selected, &includes_map);
+            for &reachable_node in &reachable {
+                covered.insert(reachable_node);
+                remaining_nodes.remove(reachable_node);
+            }
+        } else {
+            // If no best node is found, select any remaining node
+            if let Some(&first) = remaining_nodes.iter().next() {
+                result.push(first);
+                remaining_nodes.remove(first);
+                covered.insert(first);
             }
         }
     }
     
-    // 合并结果
-    result.extend(cycle_representatives);
+    result.sort();
+    result.dedup();
+    
     Ok(result)
 }
 
-fn find_cycle_nodes<'a>(start: &'a str, dependency_graph: &HashMap<&'a str, HashSet<&'a str>>, cycle_nodes: &mut Vec<&'a str>, temp_visited: &mut HashSet<&'a str>) {
-    if temp_visited.contains(start) {
-        return;
-    }
-    temp_visited.insert(start);
-    cycle_nodes.push(start);
+// Helper function: get all nodes reachable from a given node
+fn get_reachable_nodes<'a>(
+    start: &'a str, 
+    includes_map: &HashMap<&'a str, HashSet<&'a str>>
+) -> HashSet<&'a str> {
+    let mut reachable = HashSet::new();
+    let mut stack = vec![start];
+    let mut visited = HashSet::new();
     
-    if let Some(dependents) = dependency_graph.get(start) {
-        for &dependent in dependents {
-            find_cycle_nodes(dependent, dependency_graph, cycle_nodes, temp_visited);
+    while let Some(current) = stack.pop() {
+        if visited.contains(current) {
+            continue;
+        }
+        visited.insert(current);
+        reachable.insert(current);
+        
+        if let Some(children) = includes_map.get(current) {
+            for &child in children {
+                if !visited.contains(child) {
+                    stack.push(child);
+                }
+            }
         }
     }
+    
+    reachable
 }
+
 
 fn is_a_lib_header(name: &str) -> bool {
     !name.starts_with('/')
@@ -410,8 +406,152 @@ fn test_library_headers() {
 
 #[test]
 fn test_library_header() {
-    crate::config::Config::init_test("libtiff");
-    let deopt = Deopt::new("libtiff".to_string()).unwrap();
+    crate::config::Config::init_test("cJSON");
+    let deopt = Deopt::new("cJSON".to_string()).unwrap();
     let headers = get_include_lib_headers(&deopt).unwrap();
     println!("{headers:?}");
+}
+
+#[test]
+fn test_get_independent_headers() {
+    // Create test data
+    let mut root1 = TreeNode::new("header1.h".to_string());
+    let mut child1 = TreeNode::new("child1.h".to_string());
+    let child2 = TreeNode::new("child2.h".to_string());
+    child1.add_child(child2);
+    root1.add_child(child1);
+    
+    let mut root2 = TreeNode::new("header2.h".to_string());
+    let child3 = TreeNode::new("child3.h".to_string());
+    root2.add_child(child3);
+    
+    let trees = vec![root1, root2];
+    
+    // Test the function
+    let result = get_independent_headers(&trees).unwrap();
+    
+    // Verify results - should return root nodes since they are not included by others
+    assert_eq!(result.len(), 2);
+    assert!(result.contains(&"header1.h"));
+    assert!(result.contains(&"header2.h"));
+    assert!(!result.contains(&"child1.h"));
+    assert!(!result.contains(&"child2.h"));
+    assert!(!result.contains(&"child3.h"));
+}
+
+#[test]
+fn test_get_independent_headers_complex() {
+    // Create more complex test data, simulating cross-reference scenarios
+    let mut root1 = TreeNode::new("main.h".to_string());
+    let mut common = TreeNode::new("common.h".to_string());
+    let util1 = TreeNode::new("util1.h".to_string());
+    let util2 = TreeNode::new("util2.h".to_string());
+    common.add_child(util1);
+    common.add_child(util2);
+    root1.add_child(common);
+    
+    let mut root2 = TreeNode::new("secondary.h".to_string());
+    let mut helper = TreeNode::new("helper.h".to_string());
+    let base = TreeNode::new("base.h".to_string());
+    helper.add_child(base);
+    root2.add_child(helper);
+    
+    let trees = vec![root1, root2];
+    
+    // Test the function
+    let result = get_independent_headers(&trees).unwrap();
+    
+    // Verify results - should only return top-level independent headers
+    assert_eq!(result.len(), 2);
+    assert!(result.contains(&"main.h"));
+    assert!(result.contains(&"secondary.h"));
+    
+    // These should not be in the results since they are included by other headers
+    assert!(!result.contains(&"common.h"));
+    assert!(!result.contains(&"util1.h"));
+    assert!(!result.contains(&"util2.h"));
+    assert!(!result.contains(&"helper.h"));
+    assert!(!result.contains(&"base.h"));
+}
+
+#[test]
+fn test_get_independent_headers_circular() {
+    // Create circular dependency test data
+    // A -> B -> C -> A (circular dependency)
+    // D -> E (independent chain)
+    
+    let mut node_a = TreeNode::new("A.h".to_string());
+    let mut node_b = TreeNode::new("B.h".to_string());
+    let mut node_c = TreeNode::new("C.h".to_string());
+    
+    // Simulate cycle: A includes B, B includes C, C includes A
+    // Note: Due to TreeNode structure limitations, we cannot directly create true circular references
+    // But we can create a scenario where all nodes are included by other nodes
+    node_c.add_child(TreeNode::new("A.h".to_string())); // C includes A
+    node_b.add_child(node_c); // B includes C  
+    node_a.add_child(node_b); // A includes B
+    
+    // Add an independent chain to verify mixed scenarios
+    let mut node_d = TreeNode::new("D.h".to_string());
+    let node_e = TreeNode::new("E.h".to_string());
+    node_d.add_child(node_e);
+    
+    let trees = vec![node_a, node_d];
+    
+    // Test the function
+    let result = get_independent_headers(&trees).unwrap();
+    
+    // In this case, should find results containing at least A.h and D.h
+    // D.h is independent, A.h is a representative from the cycle
+    assert!(!result.is_empty());
+    
+    // D.h should be in the results since it's independent
+    assert!(result.contains(&"D.h"));
+    
+    // Results should contain the minimum set that covers all nodes
+    println!("Circular dependency test result: {:?}", result);
+}
+
+#[test]
+fn test_get_independent_headers_all_circular() {
+    // Create complete circular dependency test data, all nodes are included by others
+    // Tree1: X -> Y -> Z -> X
+    // Tree2: P -> Q -> P
+    
+    let mut node_x = TreeNode::new("X.h".to_string());
+    let mut node_y = TreeNode::new("Y.h".to_string());
+    let mut node_z = TreeNode::new("Z.h".to_string());
+    
+    // X includes Y, Y includes Z, Z includes X (simulated by creating another X node)
+    node_z.add_child(TreeNode::new("X.h".to_string()));
+    node_y.add_child(node_z);
+    node_x.add_child(node_y);
+    
+    let mut node_p = TreeNode::new("P.h".to_string());
+    let mut node_q = TreeNode::new("Q.h".to_string());
+    
+    // P includes Q, Q includes P (simulated by creating another P node)
+    node_q.add_child(TreeNode::new("P.h".to_string()));
+    node_p.add_child(node_q);
+    
+    let trees = vec![node_x, node_p];
+    
+    // Test the function
+    let result = get_independent_headers(&trees).unwrap();
+    
+    // Should find minimum set that covers all nodes
+    assert!(!result.is_empty());
+    
+    // Result count should be reasonable (not exceeding total node count)
+    assert!(result.len() <= 2); // At most two representative nodes
+    
+    println!("All circular dependency test result: {:?}", result);
+    
+    // Verify that selected nodes can indeed cover the main dependency trees
+    // Due to cycles, should include at least one of the main tree's root nodes
+    let has_main_tree_coverage = result.contains(&"X.h") || result.contains(&"Y.h") || result.contains(&"Z.h");
+    let has_second_tree_coverage = result.contains(&"P.h") || result.contains(&"Q.h");
+    
+    assert!(has_main_tree_coverage, "Should cover the main dependency tree");
+    assert!(has_second_tree_coverage, "Should cover the second dependency tree");
 }

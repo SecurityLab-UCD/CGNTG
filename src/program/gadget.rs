@@ -669,7 +669,7 @@ pub mod ctype {
         let mut ty_name = vec![];
         let mut pointer_layers = vec![];
 
-        if unalias_ty.contains("(*)") {
+        if unalias_ty.contains("(") || unalias_ty.contains(")") {
             return Ok(format!("FnPointer<{unalias_ty}>"));
         }
 
