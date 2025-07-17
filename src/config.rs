@@ -59,7 +59,7 @@ pub const FUZZER_FLAGS: [&str; 5] = [
     "-fsanitize=address,undefined",
     "-ftrivial-auto-var-init=zero",
 ];
-
+pub const NORMAL_FLAGS: &[&str] = &[];
 pub const COVERAGE_FLAGS: [&str; 9] = [
     "-g",
     "-fsanitize=fuzzer",

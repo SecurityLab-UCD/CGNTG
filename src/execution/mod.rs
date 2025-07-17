@@ -39,6 +39,7 @@ pub enum Compile {
     FUZZER,
     COVERAGE,
     Minimize,
+    Normal
 }
 
 #[derive(Default, Clone)]
@@ -83,6 +84,11 @@ impl Executor {
                 flags.push(&min_flag);
                 let fuzz_lib = crate::deopt::utils::get_fuzzer_lib_path(&self.deopt);
                 (flags, fuzz_lib)
+            }
+            Compile::Normal => {
+                let flags = crate::config::NORMAL_FLAGS.to_vec();
+                let lib = crate::deopt::utils::get_normal_lib_path(&self.deopt);
+                (flags, lib)
             }
         };
         (cflags, lib)

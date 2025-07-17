@@ -82,7 +82,8 @@ The detailed configurations of promptfuzz:
 ```
 user@ubuntu$ cargo run --bin fuzzer -- --help
 ```
-
+cargo run --bin fuzzer -- zlib -c $(nproc) -r
+ cargo run --bin fuzzer -- zlib -c $(nproc) --generation-mode api-combination -r
 ### 5. Run fuzz drivers
 Once the fuzz drivers generated finish, you should follow the follow steps to run the fuzz drivers and detect bugs.
 

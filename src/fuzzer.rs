@@ -1,5 +1,5 @@
 use crate::{
-    config::{self, get_config, get_library_name, get_handler_type, HandlerType},
+    config::{self, get_config, get_handler_type, get_library_name, HandlerType},
     deopt::Deopt,
     execution::{
         logger::{init_gtl, ProgramLogger},
@@ -10,7 +10,7 @@ use crate::{
         schedule::{rand_choose_combination, Schedule},
     },
     minimize::minimize,
-    program::{libfuzzer::LibFuzzer, rand::rand_comb_len, serde::Deserializer, Program},
+    program::{self, libfuzzer::LibFuzzer, rand::rand_comb_len, serde::Deserializer, Program},
     request::{
         self,
         prompt::{load_prompt, Prompt},
@@ -172,6 +172,47 @@ impl Fuzzer {
         }
         Ok(succ_programs)
     }
+    pub fn generate_and_validate_api_sequences(
+        &mut self,
+        prompt: &mut Prompt,
+        logger: &mut ProgramLogger,
+    ) -> Result<Vec<Program>> {
+        log::trace!(
+            "Generate until {} sucess programs",
+            get_config().fuzz_round_succ
+        );
+        let mut succ_programs = Vec::new();
+
+        while succ_programs.len()<get_config().fuzz_round_succ{
+            let mut programs = self.handler.generate(prompt)?;
+            for program in &mut programs {
+                program.id=self.deopt.inc_seed_id();
+            }
+            log::debug!(
+                "LLM generated {} programs. Sanitize those programs!",
+                programs.len()
+            );
+            for program in programs{
+                let error=self.executor.validate_api_sequence(&program, &self.deopt)?;
+                if let Some(err) = error {
+                    self.deopt.save_err_program(&program, &err)?;
+                    logger.log_err(&err);
+                }
+                else {
+                    succ_programs.push(program);
+                    logger.log_succ();
+                }
+            }
+            logger.print_succ_round();
+            if self.schedule.should_shuffle(logger.get_rc_succ(), logger.get_rc_total()) {
+            log::info!("Fuzzer stuck in the current prompt, choose a new one.");
+            break;
+        }
+        }
+        Ok(succ_programs)
+
+
+    }
 
     fn mutate_prompt(&mut self, prompt: &mut Prompt) -> Result<()> {
         let api_coverage = self.observer.compute_library_api_coverage()?;
@@ -202,15 +243,12 @@ impl Fuzzer {
     pub fn fuzz_loop(&mut self) -> Result<()> {
         let mut logger = ProgramLogger::default();
         let initial_combination = rand_choose_combination(rand_comb_len());
-        let mut prompt = if let Some(prompt) = load_prompt(&self.deopt) {
-            prompt
-        } else {
-            Prompt::from_combination(initial_combination)
-        };
-
-
-
-
+        // let mut prompt = if let Some(prompt) = load_prompt(&self.deopt) {
+        //     prompt
+        // } else {
+        //     Prompt::from_combination(initial_combination)
+        // };
+        let mut prompt=Prompt::from_combination(initial_combination);
         let mut loop_cnt = 0;
         let mut has_checked = false;
 
@@ -268,7 +306,16 @@ impl Fuzzer {
             loop {
             if self.is_converge() {
                 break;
-        
+            }
+            let programs = self.generate_and_validate_api_sequences(&mut prompt, &mut logger)?;
+            log::debug!(
+                "LLM generated {} programs. Sanitize those programs!",
+                programs.len()
+            );
+            let is_stuck = self.is_stuck(programs.len());
+            let mut has_new = false;
+            for mut program in programs {
+                //todo: solve the coverage issue
             }}
         }
         log::info!("Global branch states converged!");

@@ -178,21 +178,48 @@ impl Executor {
         if let Some(err)=self.is_program_syntax_correct(&temp_path)? {
             return Ok(Some(err));
         }
-        if let Some(err) = self.is_program_link_correct(&temp_path)? {
-            return Ok(Some(err));
-        }
+        // if let Some(err) = self.is_program_link_correct(&temp_path)? {
+        //     return Ok(Some(err));
+        // }
         // execute the program to check whether it is correct.
-        let binary_out=temp_path.with_extension("out");
-        let output = Command::new(&binary_out)
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .output()?;
+          // execute the program to check whether it is correct.
+        let binary_out = temp_path.with_extension("out");
+
+        // 直接构建 clang++ 命令，模拟 `clang++ try.cc -o a -lz`
+        let lib_dir = self.deopt.get_library_build_lib_path()?;
+        let lib_name = get_library_name();
+        let real_lib_name = match lib_name.as_str() {
+            "zlib" => "z",       // zlib 实际上是 libz
+            "ssl" => "ssl",      
+            "crypto" => "crypto",
+            other => other,      
+        };
+                let output = Command::new("clang++")
+            .arg(&temp_path)
+            .arg("-o")
+            .arg(&binary_out)
+            .arg(&self.header_cmd) 
+            .arg(format!("-L{}", lib_dir.to_string_lossy()))
+            .arg(format!("-l{}", real_lib_name)) // 添加 -l... 库名
+            .stderr(Stdio::piped())
+            .output()?;
+
         if !output.status.success() {
             let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            return Ok(Some(ProgramError::Link(err_msg)));
+        }
+
+        let exec_output = Command::new(&binary_out)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()?;
+        if !exec_output.status.success() {
+            let err_msg = String::from_utf8_lossy(&exec_output.stderr).to_string();
             return Ok(Some(ProgramError::Execute(err_msg)));
         }
         Ok(None)
     }
+    
     pub fn check_programs_are_correct(
         &self,
         programs: &[Program],
