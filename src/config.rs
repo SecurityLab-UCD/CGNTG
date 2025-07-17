@@ -284,7 +284,6 @@ pub const SYSTEM_GEN_TEMPLATE: &str = "Act as a C++ langauge Developer, write a 
 The prototype of fuzz dirver is: `extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t data, size_t size)`.
 \n";
 pub const SYSTEM_API_TEMPLATE: &str = "Act as an API usage synthesizer. Generate valid combinations of available APIs from the target library, ensuring there are no logical or syntactical errors in the code.
-The prototype of the API generator is: `extern \"C\" int LLVMGeneratorTestOneInput(const uint8_t data, size_t size)`.
 ";
 
 /// Template of providing the context of library's structures.
@@ -306,8 +305,8 @@ Here are the custom types declared in {project}. Ensure that the variables you u
 ----------------------
 ";
 
-pub const USER_API_TEMPLATE: &str = "Your task is to create a high-quality C++ function named `void test_{project}_api_sequence()` that demonstrates a realistic, end-to-end usage scenario for the {project} library.
-
+pub const USER_API_TEMPLATE: &str = "Your task is to create a high-quality C++ function named `int test_{project}_api_sequence()` that demonstrates a realistic, end-to-end usage scenario for the {project} library.
+And the return value is 66
 Use the following APIs to construct the sequence:
 {combinations}
 
@@ -324,21 +323,21 @@ Use the following APIs to construct the sequence:
 *   The function must be named `test_{project}_api_sequence`.
 *   Include a final `printf(\"API sequence test completed successfully.\\n\");` or `std::cout << \"API sequence test completed successfully.\" << std::endl;` to signal success.
 *   Do NOT include `#include` directives or a `main` function. Only provide the body of the `test_{project}_api_sequence` function.
+*   Do not include Handle error, I need you to ensure the sequence is logically correct and complete, which means We must have an output like: API sequence test completed successfully.
 
 Example structure:
 ```cpp
-void test_{project}_api_sequence() {
+int test_{project}_api_sequence() {
+    // Initialize result variable to track success or failure
     // 1. Declare and initialize all necessary variables.
     
     // 2. Setup phase: Call initialization APIs.
     
     // 3. Operation phase: Perform the core logic using the APIs.
     
-    // 4. Validation phase (optional but good): Verify the results of the operations.
-    
-    // 5. Cleanup phase: Release all allocated resources.
-    
-    printf(\"API sequence test completed successfully.\\n\");
+    // 4. Cleanup phase: Release all allocated resources.
+
+    return 66; // Indicate success
 }
 ```";
 

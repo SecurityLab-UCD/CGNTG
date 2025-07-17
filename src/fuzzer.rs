@@ -316,6 +316,8 @@ impl Fuzzer {
             let mut has_new = false;
             for mut program in programs {
                 //todo: solve the coverage issue
+                self.deopt.save_succ_program(&program)?;
+            //    let coverage = self.deopt.get_seed_coverage(program.id)?;
             }}
         }
         log::info!("Global branch states converged!");

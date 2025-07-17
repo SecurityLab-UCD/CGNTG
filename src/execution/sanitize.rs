@@ -170,7 +170,14 @@ impl Executor {
         let project_name=get_library_name();
         writeln!(temp_file,"{}", program.statements)?;
         writeln!(temp_file, "int main() {{")?;
-        writeln!(temp_file,"test_{}_api_sequence();", project_name)?;
+        writeln!(temp_file,"int result = test_{}_api_sequence();", project_name)?;
+        writeln!(temp_file, "if (result != 66) {{")?;
+        writeln!(
+            temp_file,
+            "        std::cerr << \"API sequence test failed with error code: \" << result << std::endl;"
+        )?;
+        writeln!(temp_file, "        exit(100);")?;
+        writeln!(temp_file, "    }}")?;
         writeln!(temp_file, "    return 0;")?;
         writeln!(temp_file, "}}")?;
         drop(temp_file);
@@ -217,6 +224,14 @@ impl Executor {
             let err_msg = String::from_utf8_lossy(&exec_output.stderr).to_string();
             return Ok(Some(ProgramError::Execute(err_msg)));
         }
+        let stdout_str = String::from_utf8_lossy(&exec_output.stdout);
+        // if !stdout_str.contains("API sequence test completed successfully.") {
+        //     let err_msg= format!(
+        //         "API sequence test failed, expected 'API sequence test completed successfully.', but got '{}'",
+        //         stdout_str
+        //     );
+        //     return Ok(Some(ProgramError::Execute(err_msg)));
+        // }
         Ok(None)
     }
     
