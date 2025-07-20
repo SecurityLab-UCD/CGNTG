@@ -306,7 +306,7 @@ Here are the custom types declared in {project}. Ensure that the variables you u
 ";
 
 pub const USER_API_TEMPLATE: &str = "Your task is to create a high-quality C++ function named `int test_{project}_api_sequence()` that demonstrates a realistic, end-to-end usage scenario for the {project} library.
-And the return value is 66
+And the return value is 66, not allowed to include any checks
 Use the following APIs to construct the sequence:
 {combinations}
 
@@ -321,7 +321,7 @@ Use the following APIs to construct the sequence:
 **Technical Instructions:**
 
 *   The function must be named `test_{project}_api_sequence`.
-*   Include a final `printf(\"API sequence test completed successfully.\\n\");` or `std::cout << \"API sequence test completed successfully.\" << std::endl;` to signal success.
+*   Include a fina `std::cout << \"API sequence test completed successfully.\" << std::endl;` to signal success.
 *   Do NOT include `#include` directives or a `main` function. Only provide the body of the `test_{project}_api_sequence` function.
 *   Do not include Handle error, I need you to ensure the sequence is logically correct and complete, which means We must have an output like: API sequence test completed successfully.
 

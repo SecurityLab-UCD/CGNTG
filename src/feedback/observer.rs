@@ -10,7 +10,8 @@ use crate::{
     }, Deopt
 };
 use eyre::Result;
-
+use std::collections::HashSet;
+use std::sync::{Arc, RwLock}; 
 use super::{
     branches::{Branch, BranchState, GlobalBranches},
     clang_coverage::CodeCoverage,
@@ -18,6 +19,7 @@ use super::{
 
 pub struct Observer {
     pub adg: ADG,
+    pub discovered_api_pairs: Arc<RwLock<HashSet<(String, String)>>>,
     deopt: Deopt,
     branches: GlobalBranches,
     api_coverage: HashMap<String, f32>,
@@ -30,9 +32,22 @@ impl Observer {
             deopt: deopt.clone(),
             branches: GlobalBranches::new(),
             api_coverage: HashMap::new(),
+            discovered_api_pairs: Arc::new(RwLock::new(HashSet::new())),
         }
     }
-
+    pub fn has_new_api_pairs(&self,pairs: &[(String, String)]) -> bool {
+        if pairs.is_empty() {
+            return false;
+        }
+        let mut has_new = false;
+        let mut discovered_pair = self.discovered_api_pairs.write().unwrap();
+        for pair in pairs {
+            if (discovered_pair.insert(pair.clone())) {
+                has_new = true;
+            }
+        }
+        has_new
+    }
     pub fn get_global_branches(&self) -> &GlobalBranches {
         &self.branches
     }

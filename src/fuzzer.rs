@@ -16,6 +16,9 @@ use crate::{
         prompt::{load_prompt, Prompt},
     },
 };
+use tree_sitter::{Parser, Node, TreeCursor};
+
+
 use eyre::Result;
 
 pub struct Fuzzer {
@@ -213,7 +216,49 @@ impl Fuzzer {
 
 
     }
+    fn extract_calls_recursive(source: &str, cursor: &mut TreeCursor, calls: &mut Vec<String>) {
+        let node = cursor.node();
 
+        if node.kind() == "call_expression" {
+            if let Some(function_node) = node.child_by_field_name("function") {
+                let func_name = function_node.utf8_text(source.as_bytes()).unwrap().to_string();
+                calls.push(func_name);
+            }
+        }
+
+        if cursor.goto_first_child() {
+            Self::extract_calls_recursive(source, cursor, calls);
+            while cursor.goto_next_sibling() {
+                Self::extract_calls_recursive(source, cursor, calls);
+            }
+            cursor.goto_parent();
+        }
+    }
+    fn extract_function_calls(source: &str) -> Vec<String> {
+    let mut parser = Parser::new();
+    parser.set_language(tree_sitter_cpp::language()).expect("Failed to load C++ grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse code");
+    let root_node = tree.root_node();
+
+    let mut calls = Vec::new();
+    let mut cursor = root_node.walk();
+    Self::extract_calls_recursive(source, &mut cursor, &mut calls);
+    calls
+}
+
+ 
+    fn extract_2gram_pairs(calls: &[String]) -> Vec<(String, String)> {
+        calls.windows(2)
+            .filter_map(|w| {
+                if let [a, b] = &w {
+                    Some((a.clone(), b.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
     fn mutate_prompt(&mut self, prompt: &mut Prompt) -> Result<()> {
         let api_coverage = self.observer.compute_library_api_coverage()?;
         self.schedule.update_energies(api_coverage);
@@ -239,6 +284,9 @@ impl Fuzzer {
         }
         false
     }
+    // pub fn  extract_api_pairs(&self, program: &Program) -> Result<Vec<(String, String)>> {
+    //     let string= program.statements.clone();
+    // }
 
     pub fn fuzz_loop(&mut self) -> Result<()> {
         let mut logger = ProgramLogger::default();
@@ -248,6 +296,9 @@ impl Fuzzer {
         // } else {
         //     Prompt::from_combination(initial_combination)
         // };
+        for a in initial_combination.iter() {
+            log::debug!("Initial combination: {}",a.name);
+        }
         let mut prompt=Prompt::from_combination(initial_combination);
         let mut loop_cnt = 0;
         let mut has_checked = false;
@@ -314,10 +365,24 @@ impl Fuzzer {
             );
             let is_stuck = self.is_stuck(programs.len());
             let mut has_new = false;
-            for mut program in programs {
+            for  program in programs {
                 //todo: solve the coverage issue
                 self.deopt.save_succ_program(&program)?;
-            //    let coverage = self.deopt.get_seed_coverage(program.id)?;
+                let cpp_code=&program.statements;
+                let calls = Self::extract_function_calls(cpp_code);
+                let pairs = Self::extract_2gram_pairs(&calls);
+                log::debug!("Extracted 2-gram API pairs: {:?}", pairs);
+                let is_new=self.observer.has_new_api_pairs(&pairs);
+                if is_new{
+                    has_new = true;
+                }
+                if has_new{
+                    self.quiet_round = 0;
+                }
+                else if !is_stuck {
+                    self.quiet_round += 1;
+                }
+            //    let coverage = self.deopt.get_seed_coverage(program.id)?; 
             }}
         }
         log::info!("Global branch states converged!");

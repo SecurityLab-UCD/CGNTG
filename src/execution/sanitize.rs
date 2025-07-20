@@ -169,6 +169,7 @@ impl Executor {
         write!(temp_file,"#include <stdio.h>\n")?;
         let project_name=get_library_name();
         writeln!(temp_file,"{}", program.statements)?;
+        //log::debug!("Program: {}", program.statements);
         writeln!(temp_file, "int main() {{")?;
         writeln!(temp_file,"int result = test_{}_api_sequence();", project_name)?;
         writeln!(temp_file, "if (result != 66) {{")?;
