@@ -1,4 +1,4 @@
-use std::{collections::HashMap, f32::consts::E};
+use std::{collections::HashMap,collections::HashSet, f32::consts::E};
 
 use crate::{
     deopt::Deopt,
@@ -35,7 +35,15 @@ impl Seed {
         seed.compute_energy(exponent);
         seed
     }
-
+    pub fn new_for_api_mode(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            coverage: 0.0,      // In API mode, coverage is not used
+            exec_count: 0,      // In API mode, exec_count is not used
+            prompt_count: 0,    // In API mode, prompt_count is not used
+            energy: 1.0,        // Assign a base energy value to all APIs to ensure they have a chance to be selected
+        }
+    }
     pub fn compute_energy(&mut self, exponent: u32) -> f32 {
         let top: f32 = 1_f32 - self.coverage;
         let count = 1 + self.exec_count;
@@ -82,7 +90,6 @@ impl Schedule {
             exponent: 1,
         }
     }
-
     pub fn get_seed_by_name(&self, name: &str) -> Option<&Seed> {
         self.seeds.get(name)
     }
@@ -97,7 +104,16 @@ impl Schedule {
             set_prompt_counter_value(key, value);
         }
     }
+    //initial the energies for API mode
+    pub fn initialize_energies_for_api_mode(&mut self){
+        self.seeds.clear();
+        for gadget in get_func_gadgets(){
+            let api_name = gadget.get_func_name();
+            let seed = Seed::new_for_api_mode(api_name);
+            self.seeds.insert(api_name.to_string(), seed);
 
+        }
+    }
     // Compute the energy for each library API. The high energy means the high probablity to be choosed in prompt.
     pub fn update_energies(&mut self, api_coverage: &HashMap<String, f32>) {
         self.seeds.clear();
@@ -121,7 +137,21 @@ impl Schedule {
             serde_json::to_string(&energies_str).unwrap()
         );
     }
-
+    pub fn update_energies_from_api_pairs(&mut self,api_pairs: &HashSet<(String, String)>) {
+        if api_pairs.is_empty() {
+            log::warn!("No API pairs found to update energies.");
+            return;
+        }
+        for(api1,api2) in api_pairs{
+            if let Some(seed)=self.seeds.get_mut(api1){
+                seed.energy+=1.0;
+        }
+            if let Some(seed)=self.seeds.get_mut(api2){
+                seed.energy+=1.0;
+            }
+        }
+        log::debug!("Updated energies from API pairs: {}", api_pairs.len());
+    }
     pub fn update_prompt(&self, prompt: &mut Prompt, deopt: &mut Deopt) -> eyre::Result<()> {
         if should_deterministic_mutate(deopt) {
             mutate_prompt(prompt, self, deopt);
@@ -129,6 +159,12 @@ impl Schedule {
             let combination = self.assemble_high_energy_combiantion();
             prompt.set_combination(combination);
         }
+        Ok(())
+    }
+
+    pub fn update_prompt_for_api_mode(&self, prompt: &mut Prompt) -> eyre::Result<()> {
+        let combination = self.assemble_high_energy_combiantion();
+        prompt.set_combination(combination);
         Ok(())
     }
 

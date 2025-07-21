@@ -18,9 +18,10 @@ use crate::{
 };
 use tree_sitter::{Parser, Node, TreeCursor};
 
-
+use std::collections::{HashMap, HashSet};
 use eyre::Result;
-
+use std::fs::File;
+use std::io::{self, Write};
 pub struct Fuzzer {
     pub deopt: Deopt,
     pub executor: Executor,
@@ -353,40 +354,78 @@ impl Fuzzer {
             );
             }
         } else if get_config().generation_mode==config::GenerationModeP::ApiCombination{
-            log::info!("Using api combination mode, initial prompt: {prompt:?}");
+        //    log::info!("Using api combination mode, initial prompt: {prompt:?}");
+            self.schedule.initialize_energies_for_api_mode();
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("output111.txt")?;
             loop {
             if self.is_converge() {
                 break;
             }
             let programs = self.generate_and_validate_api_sequences(&mut prompt, &mut logger)?;
+            let program_len = programs.len();
             log::debug!(
                 "LLM generated {} programs. Sanitize those programs!",
-                programs.len()
+                program_len
             );
             let is_stuck = self.is_stuck(programs.len());
-            let mut has_new = false;
-            for  program in programs {
-                //todo: solve the coverage issue
-                self.deopt.save_succ_program(&program)?;
-                let cpp_code=&program.statements;
-                let calls = Self::extract_function_calls(cpp_code);
-                let pairs = Self::extract_2gram_pairs(&calls);
-                log::debug!("Extracted 2-gram API pairs: {:?}", pairs);
-                let is_new=self.observer.has_new_api_pairs(&pairs);
-                if is_new{
-                    has_new = true;
-                }
-                if has_new{
-                    self.quiet_round = 0;
-                }
-                else if !is_stuck {
-                    self.quiet_round += 1;
-                }
-            //    let coverage = self.deopt.get_seed_coverage(program.id)?; 
-            }}
+            let mut round_newly_discovered_pairs: HashSet<(String, String)> = HashSet::new();
+            for program in programs {
+            self.deopt.save_succ_program(&program)?;
+            println!("Program ID: {}", program.id);
+            let cpp_code = &program.statements;
+            let calls = Self::extract_function_calls(cpp_code); 
+            let pairs = Self::extract_2gram_pairs(&calls);
+
+            let mut discovered_pairs_guard = self.observer.discovered_api_pairs.write().unwrap();
+            for pair in pairs {
+               // log::debug!("Discovered API pair: {:?}", pair);
+                if discovered_pairs_guard.insert(pair.clone()) {
+                        writeln!(file, "{:?}", pair)?;
+                        round_newly_discovered_pairs.insert(pair);
+                    }
+            }
         }
-        log::info!("Global branch states converged!");
-        minimize(&self.deopt)?;
+        
+        let has_new_in_round = !round_newly_discovered_pairs.is_empty();
+            if has_new_in_round {
+                self.quiet_round = 0;
+                log::debug!("Discovered {} new API pairs in this round.", round_newly_discovered_pairs.len());
+                self.schedule.update_energies_from_api_pairs(&round_newly_discovered_pairs);
+            } else if !is_stuck {
+            self.quiet_round += 1;
+        }
+        self.schedule.update_prompt_for_api_mode(&mut prompt)?;
+        loop_cnt += 1;
+        logger.reset_round();
+        log::info!(
+                    "[Mutate Loop]: loop: {loop_cnt}, quiet_round: {}, discovered_api_pairs: {}",
+                    self.quiet_round,
+                    self.observer.discovered_api_pairs.read().unwrap().len()
+        );
+        if(round_newly_discovered_pairs.len()<5&&program_len!=0){
+            break;
+        }
+        }
+        }
+        log::info!("Fuzzing loop finished. Starting minimization...");
+        
+        match get_config().generation_mode {
+            config::GenerationModeP::FuzzDriver => {
+                log::info!("Minimizing corpus by branch coverage...");
+                minimize(&self.deopt)?;
+            }
+            config::GenerationModeP::ApiCombination => {
+                log::info!("Minimizing corpus by unique API pairs...");
+                // We need to import the new function
+                use crate::minimize::minimize_by_api_pairs;
+                minimize_by_api_pairs(&self.deopt)?;
+            }
+        }
+        
+        log::info!("Minimization complete!");
         Ok(())
     }
 

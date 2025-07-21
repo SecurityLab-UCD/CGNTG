@@ -48,6 +48,17 @@ impl Observer {
         }
         has_new
     }
+
+    pub fn merge_api_pairs(&self, pairs: &HashSet<(String, String)>) {
+        if pairs.is_empty() {
+            return;
+        }
+        let mut discovered_pair = self.discovered_api_pairs.write().unwrap();
+        for pair in pairs {
+            discovered_pair.insert(pair.clone());
+        }
+    }
+
     pub fn get_global_branches(&self) -> &GlobalBranches {
         &self.branches
     }
