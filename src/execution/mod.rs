@@ -39,7 +39,7 @@ pub enum Compile {
     FUZZER,
     COVERAGE,
     Minimize,
-    Normal
+    Normal,
 }
 
 #[derive(Default, Clone)]

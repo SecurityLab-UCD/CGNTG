@@ -1,12 +1,17 @@
-use std::{collections::HashMap,collections::HashSet, f32::consts::E};
+use std::{collections::HashMap, collections::HashSet, f32::consts::E};
 
 use crate::{
     deopt::Deopt,
     mutation::mutate_prompt,
     program::{
-        gadget::{get_func_gadget, get_func_gadgets, FuncGadget}, get_exec_counter_value, load_exec_counter, rand::{prob_coin, rand_comb_len, weighted_choose}, set_exec_counter_value
+        gadget::{get_func_gadget, get_func_gadgets, FuncGadget},
+        get_exec_counter_value, load_exec_counter,
+        rand::{prob_coin, rand_comb_len, weighted_choose},
+        set_exec_counter_value,
     },
-    request::prompt::{get_prompt_counter_value, load_prompt_counter, set_prompt_counter_value, Prompt},
+    request::prompt::{
+        get_prompt_counter_value, load_prompt_counter, set_prompt_counter_value, Prompt,
+    },
 };
 
 pub struct Seed {
@@ -38,10 +43,10 @@ impl Seed {
     pub fn new_for_api_mode(name: &str) -> Self {
         Self {
             name: name.to_string(),
-            coverage: 0.0,      // In API mode, coverage is not used
-            exec_count: 0,      // In API mode, exec_count is not used
-            prompt_count: 0,    // In API mode, prompt_count is not used
-            energy: 1.0,        // Assign a base energy value to all APIs to ensure they have a chance to be selected
+            coverage: 0.0,   // In API mode, coverage is not used
+            exec_count: 0,   // In API mode, exec_count is not used
+            prompt_count: 0, // In API mode, prompt_count is not used
+            energy: 1.0, // Assign a base energy value to all APIs to ensure they have a chance to be selected
         }
     }
     pub fn compute_energy(&mut self, exponent: u32) -> f32 {
@@ -105,13 +110,12 @@ impl Schedule {
         }
     }
     //initial the energies for API mode
-    pub fn initialize_energies_for_api_mode(&mut self){
+    pub fn initialize_energies_for_api_mode(&mut self) {
         self.seeds.clear();
-        for gadget in get_func_gadgets(){
+        for gadget in get_func_gadgets() {
             let api_name = gadget.get_func_name();
             let seed = Seed::new_for_api_mode(api_name);
             self.seeds.insert(api_name.to_string(), seed);
-
         }
     }
     // Compute the energy for each library API. The high energy means the high probablity to be choosed in prompt.
@@ -122,13 +126,7 @@ impl Schedule {
             let coverage = api_coverage.get(api_name).unwrap();
             let prompt_count = get_prompt_counter_value(api_name).unwrap_or(0);
             let exec_count = get_exec_counter_value(api_name).unwrap_or(0);
-            let seed = Seed::new(
-                api_name,
-                *coverage,
-                exec_count,
-                prompt_count,
-                self.exponent,
-            );
+            let seed = Seed::new(api_name, *coverage, exec_count, prompt_count, self.exponent);
             self.seeds.insert(api_name.to_string(), seed);
         }
         let energies_str: Vec<f32> = self.seeds.values().map(|x| x.energy).collect();
@@ -137,17 +135,17 @@ impl Schedule {
             serde_json::to_string(&energies_str).unwrap()
         );
     }
-    pub fn update_energies_from_api_pairs(&mut self,api_pairs: &HashSet<(String, String)>) {
+    pub fn update_energies_from_api_pairs(&mut self, api_pairs: &HashSet<(String, String)>) {
         if api_pairs.is_empty() {
             log::warn!("No API pairs found to update energies.");
             return;
         }
-        for(api1,api2) in api_pairs{
-            if let Some(seed)=self.seeds.get_mut(api1){
-                seed.energy+=1.0;
-        }
-            if let Some(seed)=self.seeds.get_mut(api2){
-                seed.energy+=1.0;
+        for (api1, api2) in api_pairs {
+            if let Some(seed) = self.seeds.get_mut(api1) {
+                seed.energy += 1.0;
+            }
+            if let Some(seed) = self.seeds.get_mut(api2) {
+                seed.energy += 1.0;
             }
         }
         log::debug!("Updated energies from API pairs: {}", api_pairs.len());

@@ -7,14 +7,16 @@ use crate::{
     FuzzerError,
 };
 use async_openai::{
-    config::OpenAIConfig, types::{
-        ChatCompletionRequestMessage, CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateChatCompletionResponse
-    }, Client
+    config::OpenAIConfig,
+    types::{
+        ChatCompletionRequestMessage, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        CreateChatCompletionResponse,
+    },
+    Client,
 };
 use eyre::Result;
-use once_cell::sync::OnceCell;
 use futures::future::join_all;
-
+use once_cell::sync::OnceCell;
 
 use super::Handler;
 
@@ -34,7 +36,7 @@ impl TokenUsage {
             total_tokens,
         }
     }
-    
+
     pub fn from_response(response: &CreateChatCompletionResponse) -> Self {
         if let Some(usage) = &response.usage {
             Self {
@@ -46,7 +48,7 @@ impl TokenUsage {
             Self::default()
         }
     }
-    
+
     pub fn add(&mut self, other: &TokenUsage) {
         self.prompt_tokens += other.prompt_tokens;
         self.completion_tokens += other.completion_tokens;
@@ -80,23 +82,25 @@ impl Handler for OpenAIHanler {
             futures.push(future);
         }
         let results = self.rt.block_on(join_all(futures));
-        
+
         let mut programs = Vec::new();
         let mut total_usage = TokenUsage::default();
-        
+
         for result in results {
             let (program, usage) = result?;
             programs.push(program);
             total_usage.add(&usage);
         }
-        
+
         let elapsed = start.elapsed();
         log::info!("OpenAI Generate time: {}s", elapsed.as_secs());
-        log::info!("OpenAI Token Usage - Prompt: {}, Completion: {}, Total: {}", 
-                  total_usage.prompt_tokens, 
-                  total_usage.completion_tokens, 
-                  total_usage.total_tokens);
-        
+        log::info!(
+            "OpenAI Token Usage - Prompt: {}, Completion: {}, Total: {}",
+            total_usage.prompt_tokens,
+            total_usage.completion_tokens,
+            total_usage.total_tokens
+        );
+
         Ok(programs)
     }
 }
@@ -171,7 +175,7 @@ pub async fn generate_program_by_chat(
 ) -> Result<(Program, TokenUsage)> {
     let request = create_chat_request(chat_msgs, None)?;
     let respond = get_chat_response(request).await?;
-    
+
     let usage = TokenUsage::from_response(&respond);
     let choice = respond.choices.first().unwrap();
     let content = choice.message.content.as_ref().unwrap();
@@ -179,7 +183,6 @@ pub async fn generate_program_by_chat(
     let program = Program::new(&content);
     Ok((program, usage))
 }
-
 
 fn strip_code_prefix<'a>(input: &'a str, pat: &str) -> &'a str {
     let pat = String::from_iter(["```", pat]);
@@ -216,7 +219,9 @@ fn strip_code_wrapper(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use async_openai::types::{ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs};
+    use async_openai::types::{
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+    };
 
     use super::*;
 
@@ -224,32 +229,34 @@ mod tests {
     fn test_get_client() -> Result<()> {
         dotenv::dotenv().ok();
         config::init_openai_env();
-        
+
         let client = get_client().unwrap();
-        
+
         let messages: Vec<ChatCompletionRequestMessage> = vec![
             ChatCompletionRequestSystemMessageArgs::default()
-            .content("You are a helpful assistant.")
-            .build()?.into(),
+                .content("You are a helpful assistant.")
+                .build()?
+                .into(),
             ChatCompletionRequestUserMessageArgs::default()
-            .content("Explain Rust's ownership system in simple terms.")
-            .build()?.into()
+                .content("Explain Rust's ownership system in simple terms.")
+                .build()?
+                .into(),
         ];
 
         // 创建请求
         let request = CreateChatCompletionRequestArgs::default()
-            .model("claude_sonnet4")  // 使用Claude 2模型
+            .model("claude_sonnet4") // 使用Claude 2模型
             .messages(messages)
             .stream(false)
             .build()?;
-        
+
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap_or_else(|_| panic!("Unable to build the openai runtime."));
         // 发送请求
         let response = rt.block_on(client.chat().create(request));
-        
+
         // 处理响应
         match response {
             Ok(response) => {
@@ -260,7 +267,7 @@ mod tests {
                 }
             }
             Err(e) => {
-                eprintln!("API call failed: {:#?}", e);                // 不要panic，让测试继续
+                eprintln!("API call failed: {:#?}", e); // 不要panic，让测试继续
                 return Err(e.into());
             }
         }

@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use std::collections::HashSet;
 use crate::{deopt::Deopt, feedback::observer::Observer, program::Program};
 use eyre::Result;
+use std::collections::HashSet;
+use std::path::PathBuf;
 fn extract_api_pairs_from_program(program: &Program) -> HashSet<(String, String)> {
     // This logic is borrowed from fuzzer.rs
     let mut parser = tree_sitter::Parser::new();
@@ -68,7 +68,7 @@ pub fn minimize_by_api_pairs(deopt: &Deopt) -> Result<()> {
         std::fs::remove_dir_all(&final_seeds_dir)?;
     }
     std::fs::create_dir_all(&final_seeds_dir)?;
-    let num=final_seeds.len();
+    let num = final_seeds.len();
     for seed_path in final_seeds {
         let dest_path = final_seeds_dir.join(seed_path.file_name().unwrap());
         std::fs::copy(&seed_path, &dest_path)?;

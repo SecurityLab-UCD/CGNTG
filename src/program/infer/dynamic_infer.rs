@@ -386,8 +386,8 @@ pub fn find_testbed_corpora(program_path: &Path, deopt: &Deopt) -> Result<PathBu
             .clone();
         return Ok(corpora);
     }
-    if  !cache.read().unwrap().is_empty()  {
-        let choose = cache.read().unwrap().first().unwrap().to_path_buf() ;
+    if !cache.read().unwrap().is_empty() {
+        let choose = cache.read().unwrap().first().unwrap().to_path_buf();
         return Ok(choose);
     }
     eyre::bail!("Cannot find the corpora that statisfy a good coverage")

@@ -86,7 +86,7 @@ cd /data/zlib
 ./build.sh
 export OPENAI_MODEL_NAME="gpt-4o-mini-2024-07-18"
 cargo run --bin fuzzer -- zlib -c $(nproc) -r
- cargo run --bin fuzzer -- zlib -c $(nproc) --generation-mode api-combination -r
+
 ### 5. Run fuzz drivers
 Once the fuzz drivers generated finish, you should follow the follow steps to run the fuzz drivers and detect bugs.
 

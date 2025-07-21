@@ -11,7 +11,6 @@ pub static OPENAI_CONTEXT_LIMIT: OnceCell<Option<u32>> = OnceCell::new();
 
 pub static OPENAI_PROXY_BASE: OnceCell<Option<String>> = OnceCell::new();
 
-
 // General model configure options.
 pub const MUTATE_LINE: usize = 3;
 
@@ -72,7 +71,7 @@ pub const COVERAGE_FLAGS: [&str; 9] = [
     "-ftrivial-auto-var-init=zero",
 ];
 #[derive(Debug, Clone, PartialEq, ValueEnum)]
-pub enum GenerationModeP{
+pub enum GenerationModeP {
     //Generate a fuzz driver
     FuzzDriver,
     //Generate API combinations
@@ -93,11 +92,11 @@ pub fn get_openai_proxy() -> &'static Option<String> {
     OPENAI_PROXY_BASE.get().unwrap()
 }
 
-
 pub fn init_openai_env() {
-    let model = std::env::var("OPENAI_MODEL_NAME").unwrap_or_else(|_| panic!("OPENAI_MODEL_NAME not set"));
+    let model =
+        std::env::var("OPENAI_MODEL_NAME").unwrap_or_else(|_| panic!("OPENAI_MODEL_NAME not set"));
 
-    let context_limit =  std::env::var("OPENAI_CONTEXT_LIMIT")
+    let context_limit = std::env::var("OPENAI_CONTEXT_LIMIT")
         .ok()
         .and_then(|s| s.parse::<u32>().ok());
 
@@ -110,10 +109,9 @@ pub fn init_openai_env() {
     OPENAI_PROXY_BASE.set(proxy_base).unwrap();
 }
 
-pub fn get_config() -> RwLockReadGuard<'static, Config>{
+pub fn get_config() -> RwLockReadGuard<'static, Config> {
     CONFIG_INSTANCE.get().unwrap().read().unwrap()
 }
-
 
 pub fn get_library_name() -> String {
     let config = CONFIG_INSTANCE.get().unwrap().read().unwrap();
@@ -175,7 +173,7 @@ pub enum HandlerType {
 #[command(author="Anonymous", name = "LLMFuzzer", version, about="A LLM based Fuzer", long_about = None)]
 pub struct Config {
     //which generation mode to use
-    #[arg(long = "generation-mode", default_value = "fuzz-driver", value_enum)] 
+    #[arg(long = "gen-mode", default_value = "api-combination", value_enum)]
     pub generation_mode: GenerationModeP,
     /// The target project you decide to fuzz. Available: ["cJSON", "c-ares", "libvpx", "libaom", "libpng", "cre2", "curl", "lcms", "libjpeg-turbo", "libmagic", "libtiff", "sqlite3", "zlib", "libpcap"]
     pub target: String,
@@ -341,7 +339,6 @@ int test_{project}_api_sequence() {
 }
 ```";
 
-
 pub const USER_GEN_TEMPLATE: &str = "Create a C++ language program step by step by using {project} library APIs and following the instructions below:
 1. Here are several APIs in {project}. Specific an event that those APIs could achieve together, if the input is a byte stream of {project}' output data.
 {combinations};
@@ -356,8 +353,8 @@ pub const USER_GEN_TEMPLATE: &str = "Create a C++ language program step by step 
 
 pub fn get_sys_gen_template() -> &'static str {
     let config = get_config();
-    let GenerationMode= config.generation_mode.clone();
-    let template= match GenerationMode {
+    let generation_mode = config.generation_mode.clone();
+    let template = match generation_mode {
         GenerationModeP::FuzzDriver => SYSTEM_GEN_TEMPLATE,
         GenerationModeP::ApiCombination => SYSTEM_API_TEMPLATE,
     };
@@ -368,8 +365,8 @@ pub fn get_sys_gen_template() -> &'static str {
 pub fn get_user_gen_template() -> &'static str {
     pub static GTEMPLATE: OnceCell<String> = OnceCell::new();
     let generation_mode = get_config().generation_mode.clone();
-    let user_template=match generation_mode {
-        GenerationModeP::FuzzDriver=> USER_GEN_TEMPLATE,
+    let user_template = match generation_mode {
+        GenerationModeP::FuzzDriver => USER_GEN_TEMPLATE,
         GenerationModeP::ApiCombination => USER_API_TEMPLATE,
     };
     GTEMPLATE.get_or_init(|| {
