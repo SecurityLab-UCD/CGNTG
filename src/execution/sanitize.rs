@@ -14,8 +14,9 @@ use std::io::Write;
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    time::Duration,
 };
-
+use wait_timeout::ChildExt;
 use super::{
     ast::remove_duplicate_definition,
     logger::{ProgramError, TimeUsage},
@@ -210,7 +211,7 @@ impl Executor {
             "crypto" => "crypto",
             other => other,
         };
-        let output = Command::new("clang++")
+        let mut child = Command::new("clang++")
             .arg(&temp_path)
             .arg("-o")
             .arg(&binary_out)
@@ -218,20 +219,48 @@ impl Executor {
             .arg(format!("-L{}", lib_dir.to_string_lossy()))
             .arg(format!("-l{}", real_lib_name)) // 添加 -l... 库名
             .stderr(Stdio::piped())
-            .output()?;
+            .spawn()?;
 
-        if !output.status.success() {
-            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
-            return Ok(Some(ProgramError::Link(err_msg)));
+        let timeout = Duration::from_secs(10); // 设置10秒超时
+        match child.wait_timeout(timeout)? {
+            Some(status) => {
+                if !status.success() {
+                    let output = child.wait_with_output()?;
+                    let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+                    return Ok(Some(ProgramError::Link(err_msg)));
+                }
+            }
+            None => {
+                // 子进程超时
+                child.kill()?;
+                child.wait()?; // 等待进程被完全清理
+                return Ok(Some(ProgramError::Hang(
+                    "Compilation timed out".to_string(),
+                )));
+            }
         }
 
-        let exec_output = Command::new(&binary_out)
+        let mut exec_child = Command::new(&binary_out)
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
-            .output()?;
-        if !exec_output.status.success() {
-            let err_msg = String::from_utf8_lossy(&exec_output.stderr).to_string();
-            return Ok(Some(ProgramError::Execute(err_msg)));
+            .spawn()?;
+
+        match exec_child.wait_timeout(timeout)? {
+            Some(status) => {
+                if !status.success() {
+                    let output = exec_child.wait_with_output()?;
+                    let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+                    return Ok(Some(ProgramError::Execute(err_msg)));
+                }
+            }
+            None => {
+                // 子进程超时
+                exec_child.kill()?;
+                exec_child.wait()?;
+                return Ok(Some(ProgramError::Hang(
+                    "Execution timed out".to_string(),
+                )));
+            }
         }
         Ok(None)
     }

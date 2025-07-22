@@ -375,6 +375,7 @@ impl Fuzzer {
                     "LLM generated {} programs. Sanitize those programs!",
                     program_len
                 );
+                //  下面都是跑的
                 let is_stuck = self.is_stuck(programs.len());
                 let mut round_newly_discovered_pairs: HashSet<(String, String)> = HashSet::new();
                 for program in programs {
@@ -415,7 +416,7 @@ impl Fuzzer {
                     self.quiet_round,
                     self.observer.discovered_api_pairs.read().unwrap().len()
                 );
-                if round_newly_discovered_pairs.len() < 5 && program_len != 0 {
+                if round_newly_discovered_pairs.len() < 1 && program_len != 0 {
                     break;
                 }
             }
