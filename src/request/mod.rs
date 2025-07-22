@@ -2,9 +2,9 @@ use crate::program::Program;
 
 use self::prompt::Prompt;
 
+pub mod http;
 pub mod openai;
 pub mod prompt;
-pub mod http;
 
 pub trait Handler {
     /// generate programs via a formatted prompt

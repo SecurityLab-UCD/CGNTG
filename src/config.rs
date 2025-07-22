@@ -11,7 +11,6 @@ pub static OPENAI_CONTEXT_LIMIT: OnceCell<Option<u32>> = OnceCell::new();
 
 pub static OPENAI_PROXY_BASE: OnceCell<Option<String>> = OnceCell::new();
 
-
 // General model configure options.
 pub const MUTATE_LINE: usize = 3;
 
@@ -41,7 +40,6 @@ pub const MIN_FUZZ_TIME: u64 = 60;
 pub const MAX_FUZZ_TIME: u64 = 600;
 
 pub const MAX_CONTEXT_APIS: usize = 100;
-
 // recover the report of UBSan, or we can use UBSAN_OPTIONS=symbolize=1:print_stacktrace=1:halt_on_error=1 instead.
 pub const SANITIZER_FLAGS: [&str; 7] = [
     "-fsanitize=fuzzer",
@@ -60,7 +58,7 @@ pub const FUZZER_FLAGS: [&str; 5] = [
     "-fsanitize=address,undefined",
     "-ftrivial-auto-var-init=zero",
 ];
-
+pub const NORMAL_FLAGS: &[&str] = &[];
 pub const COVERAGE_FLAGS: [&str; 9] = [
     "-g",
     "-fsanitize=fuzzer",
@@ -72,6 +70,13 @@ pub const COVERAGE_FLAGS: [&str; 9] = [
     "-Wno-unused-command-line-argument",
     "-ftrivial-auto-var-init=zero",
 ];
+#[derive(Debug, Clone, PartialEq, ValueEnum)]
+pub enum GenerationModeP {
+    //Generate a fuzz driver
+    FuzzDriver,
+    //Generate API combinations
+    ApiCombination,
+}
 
 pub const ASAN_OPTIONS: [&str; 2] = ["exitcode=168", "alloc_dealloc_mismatch=0"];
 
@@ -87,11 +92,11 @@ pub fn get_openai_proxy() -> &'static Option<String> {
     OPENAI_PROXY_BASE.get().unwrap()
 }
 
-
 pub fn init_openai_env() {
-    let model = std::env::var("OPENAI_MODEL_NAME").unwrap_or_else(|_| panic!("OPENAI_MODEL_NAME not set"));
+    let model =
+        std::env::var("OPENAI_MODEL_NAME").unwrap_or_else(|_| panic!("OPENAI_MODEL_NAME not set"));
 
-    let context_limit =  std::env::var("OPENAI_CONTEXT_LIMIT")
+    let context_limit = std::env::var("OPENAI_CONTEXT_LIMIT")
         .ok()
         .and_then(|s| s.parse::<u32>().ok());
 
@@ -104,10 +109,9 @@ pub fn init_openai_env() {
     OPENAI_PROXY_BASE.set(proxy_base).unwrap();
 }
 
-pub fn get_config() -> RwLockReadGuard<'static, Config>{
+pub fn get_config() -> RwLockReadGuard<'static, Config> {
     CONFIG_INSTANCE.get().unwrap().read().unwrap()
 }
-
 
 pub fn get_library_name() -> String {
     let config = CONFIG_INSTANCE.get().unwrap().read().unwrap();
@@ -168,6 +172,9 @@ pub enum HandlerType {
 #[derive(Parser, Debug)]
 #[command(author="Anonymous", name = "LLMFuzzer", version, about="A LLM based Fuzer", long_about = None)]
 pub struct Config {
+    //which generation mode to use
+    #[arg(long = "gen-mode", default_value = "api-combination", value_enum)]
+    pub generation_mode: GenerationModeP,
     /// The target project you decide to fuzz. Available: ["cJSON", "c-ares", "libvpx", "libaom", "libpng", "cre2", "curl", "lcms", "libjpeg-turbo", "libmagic", "libtiff", "sqlite3", "zlib", "libpcap"]
     pub target: String,
     /// Sample N outputs per LLM's request, max: 128
@@ -207,6 +214,7 @@ pub struct Config {
 impl Config {
     pub fn init_test(target: &str) {
         let config = Config {
+            generation_mode: GenerationModeP::FuzzDriver,
             target: target.to_string(),
             n_sample: 10,
             temperature: 0.6,
@@ -273,6 +281,8 @@ impl LibConfig {
 pub const SYSTEM_GEN_TEMPLATE: &str = "Act as a C++ langauge Developer, write a fuzz driver that follow user's instructions.
 The prototype of fuzz dirver is: `extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t data, size_t size)`.
 \n";
+pub const SYSTEM_API_TEMPLATE: &str = "Act as an API usage synthesizer. Generate valid combinations of available APIs from the target library, ensuring there are no logical or syntactical errors in the code.
+";
 
 /// Template of providing the context of library's structures.
 pub const SYSTEM_CONTEXT_TEMPLATE: &str = "
@@ -293,6 +303,42 @@ Here are the custom types declared in {project}. Ensure that the variables you u
 ----------------------
 ";
 
+pub const USER_API_TEMPLATE: &str = "Your task is to create a high-quality C++ function named `int test_{project}_api_sequence()` that demonstrates a realistic, end-to-end usage scenario for the {project} library.
+And the return value is 66, not allowed to include any checks
+Use the following APIs to construct the sequence:
+{combinations}
+
+**Quality Requirements:**
+
+1.  **Logical Flow**: The API calls must follow a logical sequence that makes sense in a real application (e.g., initialize -> configure -> process -> validate -> cleanup).
+2.  **Data Coherence**: Data must flow correctly between API calls. Variables initialized or modified by one API should be used meaningfully by subsequent APIs.
+3.  **Completeness**: The function should be self-contained and include all necessary variable declarations, initializations, and resource management (e.g., `deflateEnd` after `deflateInit`).
+4.  **Realism**: The scenario should reflect how the library is typically used. Use realistic (but not overly complex) data and parameters.
+5.  **No Placeholders**: The function must be complete and ready to compile. Do not use placeholder comments like `// your code here`.
+
+**Technical Instructions:**
+
+*   The function must be named `test_{project}_api_sequence`.
+*   Include a fina `std::cout << \"API sequence test completed successfully.\" << std::endl;` to signal success.
+*   Do NOT include `#include` directives or a `main` function. Only provide the body of the `test_{project}_api_sequence` function.
+*   Do not include Handle error, I need you to ensure the sequence is logically correct and complete, which means We must have an output like: API sequence test completed successfully.
+
+Example structure:
+```cpp
+int test_{project}_api_sequence() {
+    // Initialize result variable to track success or failure
+    // 1. Declare and initialize all necessary variables.
+    
+    // 2. Setup phase: Call initialization APIs.
+    
+    // 3. Operation phase: Perform the core logic using the APIs.
+    
+    // 4. Cleanup phase: Release all allocated resources.
+
+    return 66; // Indicate success
+}
+```";
+
 pub const USER_GEN_TEMPLATE: &str = "Create a C++ language program step by step by using {project} library APIs and following the instructions below:
 1. Here are several APIs in {project}. Specific an event that those APIs could achieve together, if the input is a byte stream of {project}' output data.
 {combinations};
@@ -306,15 +352,26 @@ pub const USER_GEN_TEMPLATE: &str = "Create a C++ language program step by step 
 ";
 
 pub fn get_sys_gen_template() -> &'static str {
+    let config = get_config();
+    let generation_mode = config.generation_mode.clone();
+    let template = match generation_mode {
+        GenerationModeP::FuzzDriver => SYSTEM_GEN_TEMPLATE,
+        GenerationModeP::ApiCombination => SYSTEM_API_TEMPLATE,
+    };
     pub static TEMPLATE: OnceCell<String> = OnceCell::new();
-    TEMPLATE.get_or_init(|| SYSTEM_GEN_TEMPLATE.to_string())
+    TEMPLATE.get_or_init(|| template.to_string())
 }
 
 pub fn get_user_gen_template() -> &'static str {
     pub static GTEMPLATE: OnceCell<String> = OnceCell::new();
+    let generation_mode = get_config().generation_mode.clone();
+    let user_template = match generation_mode {
+        GenerationModeP::FuzzDriver => USER_GEN_TEMPLATE,
+        GenerationModeP::ApiCombination => USER_API_TEMPLATE,
+    };
     GTEMPLATE.get_or_init(|| {
         let config = get_config();
-        let template = USER_GEN_TEMPLATE.to_string();
+        let template = user_template.to_string();
         template.replace("{project}", &config.target)
     })
 }

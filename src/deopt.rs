@@ -708,7 +708,18 @@ pub mod utils {
             lib_path
         })
     }
-
+    pub fn get_normal_lib_path(deopt: &Deopt) -> &'static PathBuf {
+        static PATH: OnceCell<PathBuf> = OnceCell::new();
+        PATH.get_or_init(|| {
+            let lib_name = deopt.config.static_lib_name.clone();
+            let lib_name = lib_name.strip_suffix(".a").unwrap();
+            let san_lib = format!("{}_normal.a", lib_name);
+            let lib_path: PathBuf = [deopt.get_library_build_lib_path().unwrap(), san_lib.into()]
+                .iter()
+                .collect();
+            lib_path
+        })
+    }
     /// get the build static library linked with fuzzers
     pub fn get_fuzzer_lib_path(deopt: &Deopt) -> &'static PathBuf {
         static PATH: OnceCell<PathBuf> = OnceCell::new();

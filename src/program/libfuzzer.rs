@@ -12,10 +12,10 @@ use base64::Engine;
 use eyre::{Context, Result};
 use once_cell::sync::OnceCell;
 use std::collections::HashMap;
-use std::sync::RwLock;
 /// LibFuzzer's integeration: tranformation, synthesis, execution and sanitizaiton
 use std::path::{Path, PathBuf};
 use std::process::Child;
+use std::sync::RwLock;
 use threadpool::ThreadPool;
 
 use super::shim::{FuzzerShim, Integer};
@@ -611,7 +611,10 @@ pub fn respawn_libfuzzer_process(fuzzer_dir: &Path, executor: &Executor) -> Resu
 
         // if this driver error many times
         let err_count = {
-            let error_count_map_guard = ERROR_COUNT.get_or_init(|| RwLock::new(HashMap::new())).read().unwrap();
+            let error_count_map_guard = ERROR_COUNT
+                .get_or_init(|| RwLock::new(HashMap::new()))
+                .read()
+                .unwrap();
             if let Some(value) = error_count_map_guard.get(&driver_id) {
                 *value
             } else {
@@ -619,7 +622,10 @@ pub fn respawn_libfuzzer_process(fuzzer_dir: &Path, executor: &Executor) -> Resu
             }
         };
 
-        if let Ok(mut error_count_map_guard) = ERROR_COUNT.get_or_init(|| RwLock::new(HashMap::new())).write() {
+        if let Ok(mut error_count_map_guard) = ERROR_COUNT
+            .get_or_init(|| RwLock::new(HashMap::new()))
+            .write()
+        {
             *error_count_map_guard.entry(driver_id).or_default() += 1;
         }
 

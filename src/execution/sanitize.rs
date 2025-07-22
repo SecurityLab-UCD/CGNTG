@@ -1,3 +1,4 @@
+use self::utils::cleanup_sanitize_dir;
 use crate::{
     config::get_library_name,
     deopt::utils::get_file_dirname,
@@ -9,12 +10,11 @@ use crate::{
     Deopt,
 };
 use eyre::Result;
+use std::io::Write;
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
-
-use self::utils::cleanup_sanitize_dir;
 
 use super::{
     ast::remove_duplicate_definition,
@@ -153,6 +153,88 @@ impl Executor {
         }
         Ok(None)
     }
+    pub fn validate_api_sequence(
+        &self,
+        program: &Program,
+        deopt: &Deopt,
+    ) -> Result<Option<ProgramError>> {
+        // write the program to a temp file.
+        let temp_path = deopt.get_work_seed_by_id(program.id)?;
+        if let Some(parent) = temp_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut temp_file = std::fs::File::create(&temp_path)?;
+        write!(
+            temp_file,
+            "{}",
+            crate::deopt::utils::format_library_header_strings(deopt)
+        )?;
+        write!(temp_file, "#include <iostream>\n")?;
+        write!(temp_file, "#include <stdio.h>\n")?;
+        let project_name = get_library_name();
+        writeln!(temp_file, "{}", program.statements)?;
+        //log::debug!("Program: {}", program.statements);
+        writeln!(temp_file, "int main() {{")?;
+        writeln!(
+            temp_file,
+            "int result = test_{}_api_sequence();",
+            project_name
+        )?;
+        writeln!(temp_file, "if (result != 66) {{")?;
+        writeln!(
+            temp_file,
+            "        std::cerr << \"API sequence test failed with error code: \" << result << std::endl;"
+        )?;
+        writeln!(temp_file, "        exit(100);")?;
+        writeln!(temp_file, "    }}")?;
+        writeln!(temp_file, "    return 0;")?;
+        writeln!(temp_file, "}}")?;
+        drop(temp_file);
+        // check the program syntax and link correctness.
+        if let Some(err) = self.is_program_syntax_correct(&temp_path)? {
+            return Ok(Some(err));
+        }
+        // if let Some(err) = self.is_program_link_correct(&temp_path)? {
+        //     return Ok(Some(err));
+        // }
+        // execute the program to check whether it is correct.
+        // execute the program to check whether it is correct.
+        let binary_out = temp_path.with_extension("out");
+
+        // 直接构建 clang++ 命令，模拟 `clang++ try.cc -o a -lz`
+        let lib_dir = self.deopt.get_library_build_lib_path()?;
+        let lib_name = get_library_name();
+        let real_lib_name = match lib_name.as_str() {
+            "zlib" => "z", // zlib 实际上是 libz
+            "ssl" => "ssl",
+            "crypto" => "crypto",
+            other => other,
+        };
+        let output = Command::new("clang++")
+            .arg(&temp_path)
+            .arg("-o")
+            .arg(&binary_out)
+            .arg(&self.header_cmd)
+            .arg(format!("-L{}", lib_dir.to_string_lossy()))
+            .arg(format!("-l{}", real_lib_name)) // 添加 -l... 库名
+            .stderr(Stdio::piped())
+            .output()?;
+
+        if !output.status.success() {
+            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            return Ok(Some(ProgramError::Link(err_msg)));
+        }
+
+        let exec_output = Command::new(&binary_out)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()?;
+        if !exec_output.status.success() {
+            let err_msg = String::from_utf8_lossy(&exec_output.stderr).to_string();
+            return Ok(Some(ProgramError::Execute(err_msg)));
+        }
+        Ok(None)
+    }
 
     pub fn check_programs_are_correct(
         &self,
@@ -235,7 +317,6 @@ impl Executor {
         }
         Ok(has_errs)
     }
-
 
     // Evolving the fuzzing corpus by finding the new coverage corpus files and merge them in shared corpus.
     fn evolve_corpus(&self, program_path: &Path) -> Result<()> {
