@@ -174,6 +174,7 @@ impl Fuzzer {
                 break;
             }
         }
+        
         Ok(succ_programs)
     }
     pub fn generate_and_validate_api_sequences(
@@ -215,6 +216,7 @@ impl Fuzzer {
                 break;
             }
         }
+
         Ok(succ_programs)
     }
     fn extract_calls_recursive(source: &str, cursor: &mut TreeCursor, calls: &mut Vec<String>) {
@@ -308,7 +310,7 @@ impl Fuzzer {
         let mut loop_cnt = 0;
         let mut has_checked = false;
 
-        self.sync_from_previous_state(&mut logger)?;
+       // self.sync_from_previous_state(&mut logger)?;
 
         if get_config().generation_mode == config::GenerationModeP::FuzzDriver {
             log::info!("Using FuzzDriver mode, initial prompt: {prompt:?}");
@@ -370,14 +372,23 @@ impl Fuzzer {
                 }
                 let programs =
                     self.generate_and_validate_api_sequences(&mut prompt, &mut logger)?;
+            
+                
+                if programs.is_empty() {
+                    log::debug!("No programs generated successfully, continue to next round.");
+                    self.schedule.update_prompt_for_api_mode(&mut prompt)?;
+                    loop_cnt += 1;
+                    continue;
+                }
                 let program_len = programs.len();
                 log::debug!(
-                    "LLM generated {} programs. Sanitize those programs!",
+                    "LLM generated {} successful programs. Sanitize those programs!",
                     program_len
                 );
                 //  下面都是跑的
                 let is_stuck = self.is_stuck(programs.len());
                 let mut round_newly_discovered_pairs: HashSet<(String, String)> = HashSet::new();
+
                 for program in programs {
                     self.deopt.save_succ_program(&program)?;
                     println!("Program ID: {}", program.id);

@@ -303,41 +303,44 @@ Here are the custom types declared in {project}. Ensure that the variables you u
 ----------------------
 ";
 
-pub const USER_API_TEMPLATE: &str = "Your task is to create a high-quality C++ function named `int test_{project}_api_sequence()` that demonstrates a realistic, end-to-end usage scenario for the {project} library.
-And the return value is 66, not allowed to include any checks
-Use the following APIs to construct the sequence:
+pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically correct C++ function named `int test_{project}_api_sequence()` using the {project} library.
+
+Use the following APIs in your function:
 {combinations}
 
-**Quality Requirements:**
+**Function Requirements:**
 
-1.  **Logical Flow**: The API calls must follow a logical sequence that makes sense in a real application (e.g., initialize -> configure -> process -> validate -> cleanup).
-2.  **Data Coherence**: Data must flow correctly between API calls. Variables initialized or modified by one API should be used meaningfully by subsequent APIs.
-3.  **Completeness**: The function should be self-contained and include all necessary variable declarations, initializations, and resource management (e.g., `deflateEnd` after `deflateInit`).
-4.  **Realism**: The scenario should reflect how the library is typically used. Use realistic (but not overly complex) data and parameters.
-5.  **No Placeholders**: The function must be complete and ready to compile. Do not use placeholder comments like `// your code here`.
+1. The function must return `66` on success.  
+2. Any `if` branch must return a code other than 66.  
+3. You must not redefine or include the {project} library.  
+4. Do **not** use `std::memset`; use plain `memset`.  
+5. The function must end with:
+   API sequence test completed successfully
 
-**Technical Instructions:**
+**Code Quality Rules:**
 
-*   The function must be named `test_{project}_api_sequence`.
-*   Include a fina `std::cout << \"API sequence test completed successfully.\" << std::endl;` to signal success.
-*   Do NOT include `#include` directives or a `main` function. Only provide the body of the `test_{project}_api_sequence` function.
-*   Do not include Handle error, I need you to ensure the sequence is logically correct and complete, which means We must have an output like: API sequence test completed successfully.
+- The function must be self-contained: declare, initialize, and clean up all variables and resources.
+- The API sequence should follow a realistic and complete usage pattern:
+  - **Initialize → Configure → Operate → Validate → Cleanup**
+- Ensure that data flows meaningfully between API calls (no dummy or unused variables).
+- Do **not** use placeholders like `// your code here`.
+- No comments needed — just clean and understandable code.
 
-Example structure:
+**Output Instructions:**
+
+Only output the function body `int test_{project}_api_sequence() { ... }`  
+No `#include` directives or `main()` function.
+
+**Example Outline:**
 ```cpp
 int test_{project}_api_sequence() {
-    // Initialize result variable to track success or failure
-    // 1. Declare and initialize all necessary variables.
-    
-    // 2. Setup phase: Call initialization APIs.
-    
-    // 3. Operation phase: Perform the core logic using the APIs.
-    
-    // 4. Cleanup phase: Release all allocated resources.
-
-    return 66; // Indicate success
-}
-```";
+    // Step 1: Declarations
+    // Step 2: Setup
+    // Step 3: Core operations
+    // Step 4: Cleanup
+   API sequence test completed successfully
+    return 66;
+}";
 
 pub const USER_GEN_TEMPLATE: &str = "Create a C++ language program step by step by using {project} library APIs and following the instructions below:
 1. Here are several APIs in {project}. Specific an event that those APIs could achieve together, if the input is a byte stream of {project}' output data.

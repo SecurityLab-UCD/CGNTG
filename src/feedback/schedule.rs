@@ -149,6 +149,11 @@ impl Schedule {
             }
         }
         log::debug!("Updated energies from API pairs: {}", api_pairs.len());
+        let energies_str: Vec<f32> = self.seeds.values().map(|x| x.energy).collect();
+        log::debug!(
+            "energies: {}",
+            serde_json::to_string(&energies_str).unwrap()
+        );
     }
     pub fn update_prompt(&self, prompt: &mut Prompt, deopt: &mut Deopt) -> eyre::Result<()> {
         if should_deterministic_mutate(deopt) {
@@ -175,13 +180,13 @@ impl Schedule {
 
     pub fn should_shuffle(&self, succ: usize, total: usize) -> bool {
         // we expect per 20 programs should have a succ one.
-        if succ == 0 && total >= 30 {
+        if succ == 0 && total >= 10 {
             return true;
         }
-        if succ == 0 && total < 30 {
+        if succ == 0 && total < 10 {
             return false;
         }
-        if succ * 30 < total {
+        if succ * 10 < total {
             return true;
         }
         false

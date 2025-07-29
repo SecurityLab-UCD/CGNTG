@@ -204,22 +204,30 @@ impl Executor {
 
         // 直接构建 clang++ 命令，模拟 `clang++ try.cc -o a -lz`
         let lib_dir = self.deopt.get_library_build_lib_path()?;
+        log::debug!(
+            "Compiling program: {} with lib dir: {}",
+            temp_path.display(),
+            lib_dir.display()
+        );
         let lib_name = get_library_name();
         let real_lib_name = match lib_name.as_str() {
             "zlib" => "z", // zlib 实际上是 libz
             "ssl" => "ssl",
+            "libpng" => "png",
             "crypto" => "crypto",
             other => other,
         };
         let mut child = Command::new("clang++")
-            .arg(&temp_path)
-            .arg("-o")
-            .arg(&binary_out)
-            .arg(&self.header_cmd)
-            .arg(format!("-L{}", lib_dir.to_string_lossy()))
-            .arg(format!("-l{}", real_lib_name)) // 添加 -l... 库名
-            .stderr(Stdio::piped())
-            .spawn()?;
+                .arg(&temp_path)
+                .arg("-o")
+                .arg(&binary_out)
+                .arg("-std=c++17") // ✅ 指定 C++ 编译标准版本
+                .arg(&self.header_cmd)
+                .arg(format!("-L{}", lib_dir.to_string_lossy()))
+                .arg(format!("-l{}", real_lib_name))
+                .stderr(Stdio::piped())
+                .spawn()?;
+
 
         let timeout = Duration::from_secs(10); // 设置10秒超时
         match child.wait_timeout(timeout)? {

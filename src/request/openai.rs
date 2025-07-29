@@ -116,6 +116,7 @@ fn get_client() -> Result<&'static Client<OpenAIConfig>> {
             .build()
             .unwrap();
         let openai_config = if let Some(proxy) = get_openai_proxy() {
+            log::debug!("Using OpenAI proxy: {}", proxy);
             OpenAIConfig::default().with_api_base(proxy)
         } else {
             OpenAIConfig::new()
