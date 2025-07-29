@@ -307,9 +307,9 @@ pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically
 
 Use the following APIs in your function:
 {combinations}
-
+Here are some successful examples:
+{successful_examples}
 **Function Requirements:**
-
 1. The function must return `66` on success.  
 2. Any `if` branch must return a code other than 66.  
 3. You must not redefine or include the {project} library.  
@@ -338,7 +338,7 @@ int test_{project}_api_sequence() {
     // Step 2: Setup
     // Step 3: Core operations
     // Step 4: Cleanup
-   API sequence test completed successfully
+   //output API sequence test completed successfully
     return 66;
 }";
 

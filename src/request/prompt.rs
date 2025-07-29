@@ -5,20 +5,18 @@ use async_openai::types::{
 };
 use once_cell::sync::OnceCell;
 use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    path::PathBuf,
-    sync::RwLock,
+    collections::{HashMap, HashSet}, fmt::Display, path::PathBuf, sync::RwLock
 };
-
+use std::collections::VecDeque;
 #[derive(Clone, Debug)]
 pub struct Prompt {
     pub gadgets: Vec<&'static FuncGadget>,
+    pub successful_examples: VecDeque<String>,
 }
 
 impl Prompt {
     pub fn new(gadgets: Vec<&'static FuncGadget>) -> Self {
-        Self { gadgets }
+        Self { gadgets, successful_examples: VecDeque::new() }
     }
 }
 
@@ -99,6 +97,15 @@ impl Prompt {
         update_prompt_counter(&combination);
         self.gadgets = combination
     }
+    pub fn add_successful_example(&mut self, example_code: String) {
+        const MAX_EXAMPLES: usize = 2;
+        if self.successful_examples.len() >= MAX_EXAMPLES {
+            // 移除最旧的样例 (FIFO)
+            self.successful_examples.pop_front();
+        }
+        // 在末尾加入最新的样例
+        self.successful_examples.push_back(example_code);
+    }
 
     /// from generative prompt to API combination vec.
     pub fn get_combination(&self) -> eyre::Result<Vec<&'static FuncGadget>> {
@@ -135,8 +142,25 @@ impl Prompt {
             log::debug!("Using ApiCombination generation mode");
             let sys_msg = get_sys_gen_message(ctx, &config);
             // 也使用带上下文的消息
+            let successful_examples = if !self.successful_examples.is_empty() {
+                // 将VecDeque转换为Vec<String>以便使用join
+                let examples_code = self
+                    .successful_examples
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<String>>()
+                    .join("\n\n---\n\n");
+                format!(
+                    "**Here are some examples of previously successful code. Learn from them to improve correctness and avoid making similar mistakes:**\n\n```cpp\n{}\n```",
+                    examples_code
+                )
+            } else {
+                String::new()
+            };
             let user_msg = config::get_user_gen_template()
-                .replace("{combinations}", &combination_to_str(&self.gadgets));
+                .replace("{combinations}", &combination_to_str(&self.gadgets))
+                .replace("{successful_examples}", &successful_examples); // **注入样例**
+            log::debug!("user Prompt:{:?}",user_msg);
             let sys_msg = ChatCompletionRequestSystemMessageArgs::default()
                 .content(sys_msg)
                 .build()

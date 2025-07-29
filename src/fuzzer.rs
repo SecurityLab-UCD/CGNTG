@@ -388,14 +388,14 @@ impl Fuzzer {
                 //  下面都是跑的
                 let is_stuck = self.is_stuck(programs.len());
                 let mut round_newly_discovered_pairs: HashSet<(String, String)> = HashSet::new();
-
+                let mut successful_programs_this_round: Vec<Program> = Vec::new();
                 for program in programs {
                     self.deopt.save_succ_program(&program)?;
                     println!("Program ID: {}", program.id);
                     let cpp_code = &program.statements;
                     let calls = Self::extract_function_calls(cpp_code);
                     let pairs = Self::extract_2gram_pairs(&calls);
-
+                    successful_programs_this_round.push(program.clone());
                     let mut discovered_pairs_guard =
                         self.observer.discovered_api_pairs.write().unwrap();
                     for pair in pairs {
@@ -406,7 +406,12 @@ impl Fuzzer {
                         }
                     }
                 }
-
+                if !successful_programs_this_round.is_empty(){
+                    if let Some(example_program) = successful_programs_this_round.last() {
+                        log::info!("Adding successful program {} as an example for the next prompt.", example_program.id);
+                        prompt.add_successful_example(example_program.statements.clone());
+                    }
+                }
                 let has_new_in_round = !round_newly_discovered_pairs.is_empty();
                 if has_new_in_round {
                     self.quiet_round = 0;
