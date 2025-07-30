@@ -10,18 +10,15 @@ use crate::{
         schedule::{rand_choose_combination, Schedule},
     },
     minimize::minimize,
-    program::{ libfuzzer::LibFuzzer, rand::rand_comb_len, serde::Deserializer, Program},
-    request::{
-        self,
-        prompt::{Prompt},
-    },
+    program::{libfuzzer::LibFuzzer, rand::rand_comb_len, serde::Deserializer, Program},
+    request::{self, prompt::Prompt},
 };
 use tree_sitter::{Parser, TreeCursor};
 
 use eyre::Result;
-use std::collections::{ HashSet};
+use std::collections::HashSet;
 
-use std::io::{ Write};
+use std::io::Write;
 pub struct Fuzzer {
     pub deopt: Deopt,
     pub executor: Executor,
@@ -174,7 +171,7 @@ impl Fuzzer {
                 break;
             }
         }
-        
+
         Ok(succ_programs)
     }
     pub fn generate_and_validate_api_sequences(
@@ -199,9 +196,46 @@ impl Fuzzer {
             );
             for program in programs {
                 let error = self.executor.validate_api_sequence(&program, &self.deopt)?;
+
                 if let Some(err) = error {
-                    self.deopt.save_err_program(&program, &err)?;
-                    logger.log_err(&err);
+                    // --- 修复逻辑开始 ---
+                    log::warn!(
+                        "Program {} failed validation. Attempting to repair. Error: {}",
+                        program.id,
+                        err
+                    );
+
+                    prompt.set_repair_task(program.statements.clone(), err.clone());
+                    let mut repaired_programs = self.handler.generate(prompt)?;
+                    if let Some(repaired_program) = repaired_programs.get_mut(0) {
+                        repaired_program.id = program.id;
+
+                        let repair_error = self
+                            .executor
+                            .validate_api_sequence(repaired_program, &self.deopt)?;
+                        if let Some(final_err) = repair_error {
+                            log::error!(
+                                "Repair failed for program {}. Final error: {}",
+                                program.id,
+                                final_err
+                            );
+                            self.deopt.save_err_program(&program, &final_err)?;
+                            logger.log_err(&final_err);
+                        } else {
+                            log::info!("Successfully repaired program {}!", program.id);
+                            succ_programs.push(repaired_program.clone());
+                            logger.log_succ();
+                        }
+                    } else {
+                        log::error!(
+                            "LLM did not return a repaired version for program {}.",
+                            program.id
+                        );
+                        self.deopt.save_err_program(&program, &err)?;
+                        logger.log_err(&err);
+                    }
+                    // 无论修复成功与否，都将任务重置回生成模式
+                    prompt.set_generate_task();
                 } else {
                     succ_programs.push(program);
                     logger.log_succ();
@@ -310,7 +344,7 @@ impl Fuzzer {
         let mut loop_cnt = 0;
         let mut has_checked = false;
 
-       // self.sync_from_previous_state(&mut logger)?;
+        // self.sync_from_previous_state(&mut logger)?;
 
         if get_config().generation_mode == config::GenerationModeP::FuzzDriver {
             log::info!("Using FuzzDriver mode, initial prompt: {prompt:?}");
@@ -372,8 +406,7 @@ impl Fuzzer {
                 }
                 let programs =
                     self.generate_and_validate_api_sequences(&mut prompt, &mut logger)?;
-            
-                
+
                 if programs.is_empty() {
                     log::debug!("No programs generated successfully, continue to next round.");
                     self.schedule.update_prompt_for_api_mode(&mut prompt)?;
@@ -406,9 +439,12 @@ impl Fuzzer {
                         }
                     }
                 }
-                if !successful_programs_this_round.is_empty(){
+                if !successful_programs_this_round.is_empty() {
                     if let Some(example_program) = successful_programs_this_round.last() {
-                        log::info!("Adding successful program {} as an example for the next prompt.", example_program.id);
+                        log::info!(
+                            "Adding successful program {} as an example for the next prompt.",
+                            example_program.id
+                        );
                         prompt.add_successful_example(example_program.statements.clone());
                     }
                 }

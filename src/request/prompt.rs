@@ -1,22 +1,49 @@
 use crate::config::Config;
+use crate::execution::logger::ProgramError;
 use async_openai::types::{
     ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
     ChatCompletionRequestUserMessageArgs,
 };
 use once_cell::sync::OnceCell;
-use std::{
-    collections::{HashMap, HashSet}, fmt::Display, path::PathBuf, sync::RwLock
-};
 use std::collections::VecDeque;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    path::PathBuf,
+    sync::RwLock,
+};
+#[derive(Debug, Clone)]
+pub enum ProgramTask {
+    Generate,
+    Repair {
+        failed_code: String,
+        error: ProgramError,
+    },
+}
 #[derive(Clone, Debug)]
 pub struct Prompt {
     pub gadgets: Vec<&'static FuncGadget>,
     pub successful_examples: VecDeque<String>,
+    pub task: ProgramTask,
 }
 
 impl Prompt {
     pub fn new(gadgets: Vec<&'static FuncGadget>) -> Self {
-        Self { gadgets, successful_examples: VecDeque::new() }
+        Self {
+            gadgets,
+            successful_examples: VecDeque::new(),
+            task: ProgramTask::Generate,
+        }
+    }
+    pub fn set_repair_task(&mut self, failed_code: String, error: ProgramError) {
+        self.task = ProgramTask::Repair {
+            failed_code: (failed_code),
+            error: (error),
+        }
+    }
+
+    pub fn set_generate_task(&mut self) {
+        self.task = ProgramTask::Generate;
     }
 }
 
@@ -142,32 +169,56 @@ impl Prompt {
             log::debug!("Using ApiCombination generation mode");
             let sys_msg = get_sys_gen_message(ctx, &config);
             // 也使用带上下文的消息
-            let successful_examples = if !self.successful_examples.is_empty() {
-                // 将VecDeque转换为Vec<String>以便使用join
-                let examples_code = self
-                    .successful_examples
-                    .iter()
-                    .cloned()
-                    .collect::<Vec<String>>()
-                    .join("\n\n---\n\n");
-                format!(
-                    "**Here are some examples of previously successful code. Learn from them to improve correctness and avoid making similar mistakes:**\n\n```cpp\n{}\n```",
-                    examples_code
-                )
-            } else {
-                String::new()
+            let user_msg_content = match &self.task {
+                &ProgramTask::Generate => {
+                    let successful_examples = if !self.successful_examples.is_empty() {
+                        let examples_code = self
+                            .successful_examples
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<String>>()
+                            .join("\n\n---\n\n");
+                        format!(
+                            "Here are some successful examples:\n```cpp\n{}\n```",
+                            examples_code
+                        )
+                    } else {
+                        String::new()
+                    };
+
+                    config::get_user_gen_template()
+                        .replace("{combinations}", &combination_to_str(&self.gadgets))
+                        .replace("{successful_examples}", &successful_examples)
+                }
+
+                ProgramTask::Repair { failed_code, error } => {
+                    let (error_type_str, error_details_str) = match error {
+                        ProgramError::Syntax(e) => ("Syntax Error", e.clone()),
+                        ProgramError::Link(e) => ("Link Error", e.clone()),
+                        ProgramError::Execute(e) => ("Execution Error", e.clone()),
+                        ProgramError::Hang(e) => ("Execution Hang", e.clone()),
+                        _ => ("Other Error", error.to_string()),
+                    };
+
+                    // 使用您在 config.rs 中定义的模板
+                    config::ERROR_REPAIR_TEMPLATE
+                        .replace("{error_code}", failed_code)
+                        .replace("{error_type}", error_type_str)
+                        .replace("{error_details}", &error_details_str)
+                }
             };
-            let user_msg = config::get_user_gen_template()
-                .replace("{combinations}", &combination_to_str(&self.gadgets))
-                .replace("{successful_examples}", &successful_examples); // **注入样例**
-            log::debug!("user Prompt:{:?}",user_msg);
+            log::debug!("user Prompt:{:?}", user_msg_content);
+            // let user_msg = config::get_user_gen_template()
+            //     .replace("{combinations}", &combination_to_str(&self.gadgets))
+            //     .replace("{successful_examples}", &successful_examples); // **注入样例**
+            //log::debug!("user Prompt:{:?}", user_msg);
             let sys_msg = ChatCompletionRequestSystemMessageArgs::default()
                 .content(sys_msg)
                 .build()
                 .unwrap()
                 .into();
             let user_msg = ChatCompletionRequestUserMessageArgs::default()
-                .content(user_msg)
+                .content(user_msg_content)
                 .build()
                 .unwrap()
                 .into();

@@ -1,4 +1,9 @@
 use self::utils::cleanup_sanitize_dir;
+use super::{
+    ast::remove_duplicate_definition,
+    logger::{ProgramError, TimeUsage},
+    Executor,
+};
 use crate::{
     config::get_library_name,
     deopt::utils::get_file_dirname,
@@ -17,11 +22,6 @@ use std::{
     time::Duration,
 };
 use wait_timeout::ChildExt;
-use super::{
-    ast::remove_duplicate_definition,
-    logger::{ProgramError, TimeUsage},
-    Executor,
-};
 
 impl Executor {
     /// check whether the c program is syntactically and semantically correct.
@@ -218,16 +218,15 @@ impl Executor {
             other => other,
         };
         let mut child = Command::new("clang++")
-                .arg(&temp_path)
-                .arg("-o")
-                .arg(&binary_out)
-                .arg("-std=c++17") // ✅ 指定 C++ 编译标准版本
-                .arg(&self.header_cmd)
-                .arg(format!("-L{}", lib_dir.to_string_lossy()))
-                .arg(format!("-l{}", real_lib_name))
-                .stderr(Stdio::piped())
-                .spawn()?;
-
+            .arg(&temp_path)
+            .arg("-o")
+            .arg(&binary_out)
+            .arg("-std=c++17") // ✅ 指定 C++ 编译标准版本
+            .arg(&self.header_cmd)
+            .arg(format!("-L{}", lib_dir.to_string_lossy()))
+            .arg(format!("-l{}", real_lib_name))
+            .stderr(Stdio::piped())
+            .spawn()?;
 
         let timeout = Duration::from_secs(10); // 设置10秒超时
         match child.wait_timeout(timeout)? {
@@ -265,9 +264,7 @@ impl Executor {
                 // 子进程超时
                 exec_child.kill()?;
                 exec_child.wait()?;
-                return Ok(Some(ProgramError::Hang(
-                    "Execution timed out".to_string(),
-                )));
+                return Ok(Some(ProgramError::Hang("Execution timed out".to_string())));
             }
         }
         Ok(None)
