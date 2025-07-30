@@ -302,6 +302,13 @@ Here are the custom types declared in {project}. Ensure that the variables you u
 {context}
 ----------------------
 ";
+pub const ERROR_REPAIR_TEMPLATE: &str =
+    "The previous attempt to generate code failed with the following error:
+Error code:{error_code}
+Error Type: {error_type}
+Error Details:{error_details}
+Please regenerate a new program to repair the error without changing the logic, do not redefine main function
+";
 
 pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically correct C++ function named `int test_{project}_api_sequence()` using the {project} library.
 
@@ -309,29 +316,29 @@ Use the following APIs in your function:
 {combinations}
 Here are some successful examples:
 {successful_examples}
-**Function Requirements:**
+Function Requirements:
 1. The function must return `66` on success.  
 2. Any `if` branch must return a code other than 66.  
 3. You must not redefine or include the {project} library.  
-4. Do **not** use `std::memset`; use plain `memset`.  
+4. Do not use `std::memset`; use plain `memset`.  
 5. The function must end with:
    API sequence test completed successfully
 
-**Code Quality Rules:**
+Code Quality Rules:
 
 - The function must be self-contained: declare, initialize, and clean up all variables and resources.
 - The API sequence should follow a realistic and complete usage pattern:
-  - **Initialize → Configure → Operate → Validate → Cleanup**
+  - Initialize → Configure → Operate → Validate → Cleanup
 - Ensure that data flows meaningfully between API calls (no dummy or unused variables).
-- Do **not** use placeholders like `// your code here`.
+- Do not use placeholders like `// your code here`.
 - No comments needed — just clean and understandable code.
 
-**Output Instructions:**
+Output Instructions:
 
 Only output the function body `int test_{project}_api_sequence() { ... }`  
 No `#include` directives or `main()` function.
 
-**Example Outline:**
+Example Outline:
 ```cpp
 int test_{project}_api_sequence() {
     // Step 1: Declarations

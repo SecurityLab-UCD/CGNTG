@@ -7,8 +7,8 @@ use std::{
 use eyre::Result;
 use once_cell::sync::OnceCell;
 use regex::{Captures, Regex};
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+use std::fmt;
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub enum ProgramError {
     Syntax(String),
     Link(String),
@@ -27,6 +27,17 @@ impl ProgramError {
             ProgramError::Fuzzer(msg) => format!("\nFuzzer Error: \n{msg}"),
             ProgramError::Coverage(msg) => format!("\nCoverage Error: \n{msg}"),
             ProgramError::Hang(msg) => format!("\nExecuted Hang!: \n{msg}"),
+        }
+    }
+}
+impl fmt::Display for ProgramError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProgramError::Syntax(e) => write!(f, "Syntax Error: {}", e),
+            ProgramError::Link(e) => write!(f, "Link Error: {}", e),
+            ProgramError::Execute(e) => write!(f, "Execution Error: {}", e),
+            ProgramError::Hang(e) => write!(f, "Hang Error: {}", e),
+            _ => write!(f, "Other Error!"),
         }
     }
 }
