@@ -70,6 +70,16 @@ pub const COVERAGE_FLAGS: [&str; 9] = [
     "-Wno-unused-command-line-argument",
     "-ftrivial-auto-var-init=zero",
 ];
+pub const COVERAGE_FLAGS_NO_FUZZ: [&str; 8] = [
+    "-g",
+    "-fprofile-instr-generate",
+    "-fcoverage-mapping",
+    "-Wl,--no-as-needed",
+    "-Wl,-ldl",
+    "-Wl,-lm",
+    "-Wno-unused-command-line-argument",
+    "-ftrivial-auto-var-init=zero",
+];
 #[derive(Debug, Clone, PartialEq, ValueEnum)]
 pub enum GenerationModeP {
     //Generate a fuzz driver

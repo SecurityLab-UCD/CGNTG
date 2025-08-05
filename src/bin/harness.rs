@@ -56,9 +56,6 @@ enum Commands {
     },
     /// Fuse the api combination in seeds to a single executable.
     CNTGFuse {
-        /// the count of cpu cores you could use
-        #[arg(short, default_value = "10")]
-        cpu_cores: usize,
         /// the path of seeds to fuse
         seed_dir: Option<PathBuf>,
     },
@@ -226,7 +223,6 @@ fn fuse_fuzzer(
 fn cntg_fuse(
     project: String,
     seed_dir: &Option<PathBuf>,
-    cpu_cores: usize,
 ) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let test_dir: PathBuf = if let Some(seed_dir) = seed_dir {
@@ -239,21 +235,11 @@ fn cntg_fuse(
     
     let batch_size = programs.len(); // process in a single batch
     
-    let cpu_count = max_cpu_count();
-    let core = if cpu_cores > cpu_count || cpu_cores == 0 {
-        cpu_count
-    } else {
-        cpu_cores
-    };
-    
-    let mut cntg_program = CNTGProgram::new(programs, batch_size, core, deopt);
+    let mut cntg_program = CNTGProgram::new(programs, batch_size, deopt);
     cntg_program.transform()?;
     cntg_program.synthesis()?;
-    
-    // TODO: Implement CNTGFuse functionality
-    // This function should fuse API combinations instead of fuzz drivers
-    // - Compile the executable with coverage instrumentation
-    todo!();
+    cntg_program.compile()?;
+    Ok(())
 }
 
 fn compile_fuzzer(project: String, kind: Compile, exploit: bool) -> Result<()> {
@@ -269,6 +255,7 @@ fn compile_fuzzer(project: String, kind: Compile, exploit: bool) -> Result<()> {
                 Compile::COVERAGE => "fuzzer_cov",
                 Compile::Minimize => "fuzzer_evo",
                 Compile::Normal => "fuzzer_normal",
+                Compile::CoverageNoFuzz => todo!(),
             };
             let fuzzer_binary: PathBuf = [fuzzer_dir.clone(), fuzzer_name.into()].iter().collect();
             executor.compile_lib_fuzzers(&fuzzer_dir, &fuzzer_binary, kind.clone())?;
@@ -442,10 +429,9 @@ fn main() -> ExitCode {
             fuse_fuzzer(project, seed_dir, *n_fuzzer, *cpu_cores, *use_cons).unwrap();
         }
         Commands::CNTGFuse {
-            cpu_cores,
             seed_dir,
         } => {
-            cntg_fuse(project, seed_dir, *cpu_cores).unwrap();
+            cntg_fuse(project, seed_dir).unwrap();
         }
         Commands::Minimize => {
             let deopt = Deopt::new(project).unwrap();

@@ -771,6 +771,33 @@ pub mod utils {
         })
     }
 
+    /// get the build static library linked with coverage without fuzzer
+    pub fn get_cov_no_fuzz_lib_path(deopt: &Deopt, use_shared: bool) -> &'static PathBuf {
+        static SHARE_PATH: OnceCell<PathBuf> = OnceCell::new();
+        if use_shared {
+            return SHARE_PATH.get_or_init(|| {
+                let lib_name = deopt.config.dyn_lib_name.clone();
+                let lib_name = lib_name.strip_suffix(".so").unwrap();
+                let cov_lib = format!("{}_cov_no_fuzz.so", lib_name);
+                let lib_path: PathBuf =
+                    [deopt.get_library_build_lib_path().unwrap(), cov_lib.into()]
+                        .iter()
+                        .collect();
+                lib_path
+            });
+        }
+        static STATIC_PATH: OnceCell<PathBuf> = OnceCell::new();
+        STATIC_PATH.get_or_init(|| {
+            let lib_name = deopt.config.static_lib_name.clone();
+            let lib_name = lib_name.strip_suffix(".a").unwrap();
+            let cov_lib = format!("{}_cov_no_fuzz.a", lib_name);
+            let lib_path: PathBuf = [deopt.get_library_build_lib_path().unwrap(), cov_lib.into()]
+                .iter()
+                .collect();
+            lib_path
+        })
+    }
+
     pub fn get_file_dirname(path: &Path) -> PathBuf {
         if path.is_dir() {
             return PathBuf::from(path);

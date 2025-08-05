@@ -38,6 +38,7 @@ pub enum Compile {
     SANITIZE,
     FUZZER,
     COVERAGE,
+    CoverageNoFuzz,
     Minimize,
     Normal,
 }
@@ -76,6 +77,11 @@ impl Executor {
             Compile::COVERAGE => {
                 let flags = crate::config::COVERAGE_FLAGS.to_vec();
                 let cov_lib = crate::deopt::utils::get_cov_lib_path(&self.deopt, false);
+                (flags, cov_lib)
+            }
+            Compile::CoverageNoFuzz => {
+                let flags = crate::config::COVERAGE_FLAGS_NO_FUZZ.to_vec();
+                let cov_lib = crate::deopt::utils::get_cov_no_fuzz_lib_path(&self.deopt, false);
                 (flags, cov_lib)
             }
             Compile::Minimize => {

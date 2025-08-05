@@ -9,8 +9,6 @@ pub struct CNTGProgram {
     programs: Vec<PathBuf>,
     /// number of programs coalesced to a huge executable
     batch: usize,
-    /// number of CPU cores used to parallelly process
-    core: usize,
     /// Deopt
     pub deopt: Deopt,
 }
@@ -19,13 +17,11 @@ impl CNTGProgram {
     pub fn new(
         programs: Vec<PathBuf>,
         batch_size: usize,
-        core: usize,
         deopt: Deopt,
     ) -> Self {
         Self {
             programs,
             batch: batch_size,
-            core,
             deopt,
         }
     }
@@ -58,17 +54,19 @@ impl CNTGProgram {
     }
 
     pub fn transform(&mut self) -> Result<()> {
+        // TODO: Parallel processing to speed up transformation.
         self.init()?;
         self.programs = self.clone_programs()?;
         
         log::info!("Transform the correct programs to CNTG programs!");
-        
-        for program in &self.programs {
-            log::trace!("transform {program:?}");
-            let mut transformer = crate::program::transform::Transformer::new_cntg(program, &self.deopt)?;
-            transformer.preprocess()?;
-        }
         Ok(())
+        // Currently CNTGProgram does not seem to need preprocessing. It is also incompatible with the fuzzer preprocessing.
+        //for program in &self.programs {
+        //    log::trace!("transform {program:?}");
+        //    let mut transformer = crate::program::transform::Transformer::new_cntg(program, &self.deopt)?;
+        //    transformer.preprocess()?;
+        //}
+        //Ok(())
     }
 
     /// Synthesize the separate CNTG drivers/seeds into a large programs.
@@ -112,7 +110,7 @@ impl CNTGProgram {
         let lib = self.deopt.project_name.clone();
         for id in batch_id {
             stmts.push_str(&format!(
-                "extern \"C\" int test_{lib}_api_sequence_{id}(int argc, char* argv[]);\n",
+                "int test_{lib}_api_sequence_{id}();\n",
             ));
         }
         stmts.push_str("\n\n");
@@ -123,7 +121,7 @@ impl CNTGProgram {
         for (i, id) in batch_id.iter().enumerate() {
             stmts.push_str(&format!("\tstd::cout << \"Running program {i}...\" << std::endl;\n"));
             stmts.push_str(&format!(
-                "\ttest_{}_api_sequence_{id}(argc, argv);\n",
+                "\ttest_{}_api_sequence_{id}();\n",
                 lib
             ));
         }
@@ -183,4 +181,26 @@ impl CNTGProgram {
         std::fs::write(dst_driver, buf)?;
         Ok(())
     }
+
+    pub fn compile(&self) -> Result<()> {
+        let executor = crate::execution::Executor::new(&self.deopt)?;
+        for dir in std::fs::read_dir(self.deopt.get_library_cntg_dir()?)? {
+            let core_dir = dir?.path();
+            if core_dir.is_dir() {
+                log::info!("Compile to Core: {core_dir:?}");
+                let core_binary = get_core_path(&core_dir);
+                executor.compile_lib_fuzzers(
+                    &core_dir,
+                    &core_binary,
+                    crate::execution::Compile::CoverageNoFuzz,
+                )?;
+                self.deopt.copy_library_init_file(&core_dir)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+pub fn get_core_path(core_dir: &Path) -> PathBuf {
+    [core_dir.to_path_buf(), "core".into()].iter().collect()
 }

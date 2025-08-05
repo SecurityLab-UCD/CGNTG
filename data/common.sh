@@ -76,6 +76,18 @@ function coverage_env() {
     export CXXFLAGS="${CXXFLAGS:-} $COVERAGE_FLAGS"
 }
 
+function coverage_env_no_fuzz() {
+    unset CFLAGS
+    unset CXXFLAGS
+    unset LDFLAGS
+    blue_echo "set coverage env without fuzzer"
+    COVERAGE_FLAGS="-g -fprofile-instr-generate -fcoverage-mapping -Wl,--no-as-needed -Wl,-ldl -Wl,-lm -Wno-unused-command-line-argument"
+    export CC=clang
+    export CXX=clang++
+    export CFLAGS="${CFLAGS:-} $COVERAGE_FLAGS"
+    export CXXFLAGS="${CXXFLAGS:-} $COVERAGE_FLAGS"
+}
+
 function build_bc() {
     blue_echo "build bitcode"
     unset CFLAGS
@@ -162,6 +174,13 @@ function build_cov() {
     OUT=$OLD_OUT
 }
 
+function build_cov_no_fuzz() {
+    blue_echo "build with coverage without fuzzer"
+    coverage_env_no_fuzz
+    build_lib
+    copy_lib cov_no_fuzz
+}
+
 function write_magicbytes_to_dict() {
     magic="fmagic=\"\xCA\xFE\xBA\""
     echo $magic >> ${LIB_BUILD}/fuzzer.dict
@@ -195,6 +214,7 @@ function build_all() {
     build_corpus && \
     build_dict && \
     build_cov && \
+    build_cov_no_fuzz && \
     copy_include && \
     build_bc && \
     write_magicbytes_to_dict 
