@@ -243,6 +243,13 @@ impl Deopt {
         Ok(outs_dir)
     }
 
+    pub fn get_library_cntg_dir(&self) -> Result<PathBuf> {
+        let mut outs_dir = self.get_library_output_dir()?;
+        outs_dir.push("cntg");
+        utils::create_dir_if_nonexist(&outs_dir)?;
+        Ok(outs_dir)
+    }
+
     fn get_library_error_seed_dir(&self) -> Result<PathBuf> {
         let mut outcs_dir = self.get_library_output_dir()?;
         outcs_dir.push("error_seeds");

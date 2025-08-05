@@ -13,6 +13,7 @@ use prompt_fuzz::feedback::observer::Observer;
 use prompt_fuzz::minimize::minimize;
 use prompt_fuzz::program::infer::infer_constraints;
 use prompt_fuzz::program::libfuzzer::{sanitize_crash, LibFuzzer};
+use prompt_fuzz::program::cntg::CNTGProgram;
 use strum_macros::Display;
 
 /// Command Parser
@@ -51,6 +52,14 @@ enum Commands {
         /// the count of cpu cores you could use
         #[arg(short, default_value = "10")]
         cpu_cores: usize,
+        seed_dir: Option<PathBuf>,
+    },
+    /// Fuse the api combination in seeds to a single executable.
+    CNTGFuse {
+        /// the count of cpu cores you could use
+        #[arg(short, default_value = "10")]
+        cpu_cores: usize,
+        /// the path of seeds to fuse
         seed_dir: Option<PathBuf>,
     },
     /// Run a synthesized fuzzer in the fuzz dir.
@@ -212,6 +221,38 @@ fn fuse_fuzzer(
     lib_fuzzer.synthesis()?;
     lib_fuzzer.compile()?;
     Ok(())
+}
+
+fn cntg_fuse(
+    project: String,
+    seed_dir: &Option<PathBuf>,
+    cpu_cores: usize,
+) -> Result<()> {
+    let deopt = Deopt::new(project)?;
+    let test_dir: PathBuf = if let Some(seed_dir) = seed_dir {
+        seed_dir.clone()
+    } else {
+        deopt.get_library_seed_dir()?
+    };
+    let programs = crate::deopt::utils::read_sort_dir(&test_dir)?;
+    dbg!(&programs);
+    
+    let cpu_count = max_cpu_count();
+    let core = if cpu_cores > cpu_count || cpu_cores == 0 {
+        cpu_count
+    } else {
+        cpu_cores
+    };
+    
+    let mut cntg_program = CNTGProgram::new(programs, core, deopt);
+    cntg_program.transform()?;
+    
+    // TODO: Implement CNTGFuse functionality
+    // This function should fuse API combinations instead of fuzz drivers
+    // - Transform them into no-input functions (keep original main() functions)
+    // - Batch them together into a single executable
+    // - Compile the executable with coverage instrumentation
+    todo!();
 }
 
 fn compile_fuzzer(project: String, kind: Compile, exploit: bool) -> Result<()> {
@@ -398,6 +439,12 @@ fn main() -> ExitCode {
             seed_dir,
         } => {
             fuse_fuzzer(project, seed_dir, *n_fuzzer, *cpu_cores, *use_cons).unwrap();
+        }
+        Commands::CNTGFuse {
+            cpu_cores,
+            seed_dir,
+        } => {
+            cntg_fuse(project, seed_dir, *cpu_cores).unwrap();
         }
         Commands::Minimize => {
             let deopt = Deopt::new(project).unwrap();
