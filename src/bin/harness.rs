@@ -237,6 +237,8 @@ fn cntg_fuse(
     let programs = crate::deopt::utils::read_sort_dir(&test_dir)?;
     dbg!(&programs);
     
+    let batch_size = programs.len(); // process in a single batch
+    
     let cpu_count = max_cpu_count();
     let core = if cpu_cores > cpu_count || cpu_cores == 0 {
         cpu_count
@@ -244,13 +246,12 @@ fn cntg_fuse(
         cpu_cores
     };
     
-    let mut cntg_program = CNTGProgram::new(programs, core, deopt);
+    let mut cntg_program = CNTGProgram::new(programs, batch_size, core, deopt);
     cntg_program.transform()?;
+    cntg_program.synthesis()?;
     
     // TODO: Implement CNTGFuse functionality
     // This function should fuse API combinations instead of fuzz drivers
-    // - Transform them into no-input functions (keep original main() functions)
-    // - Batch them together into a single executable
     // - Compile the executable with coverage instrumentation
     todo!();
 }
