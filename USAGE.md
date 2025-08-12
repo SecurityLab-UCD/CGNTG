@@ -9,11 +9,14 @@ docker run -it promptfuzz bash
 ```
 
 ### 2. Library build scripts
-Before you apply this fuzzer for a new project, you **must** have a automatic build script to build your project to prepare the required data (e.g., headers, link libraries, fuzzing corpus and etc.), like [OSS-Fuzz](https://github.com/google/oss-fuzz). See [Preparation](data/README.md).
+Before you use this tool for a new project, you **must** have a automatic build
+script to build your project to prepare the required data (e.g., headers, link
+libraries, test data and etc.), like
+[OSS-Fuzz](https://github.com/google/oss-fuzz). See
+[Preparation](data/README.md).
 
-
-We have prepared the build scripts for some popular open source libraries, you can refer to the **data** directory.
-
+We have prepared the build scripts for some popular open source libraries, you
+can refer to the **data** directory.
 
 
 ### 3. Build Environment Locally (Optional)
@@ -24,7 +27,9 @@ If you prefer to set up the environment locally instead of using Docker, you can
 - LLVM and Clang (built with compiler-rt)
 - wllvm (installed by `pip3 install wllvm`)
 
-You can download llvm and clang from this [link](https://github.com/llvm/llvm-project/releases/tag/llvmorg-15.0.0) or install by [llvm.sh](https://apt.llvm.org/).
+You can download llvm and clang from this
+[link](https://github.com/llvm/llvm-project/releases/tag/llvmorg-15.0.0) or
+install by [llvm.sh](https://apt.llvm.org/).
 
 Explicit dependency see [Dockerfile](Dockerfile).
 
@@ -39,12 +44,12 @@ cmake -S llvm -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECT
 ## 🦄Basic Usage
 
 ### 1. Build library
-Run the script in the **prompt_fuzz/data** directory, to prepare the required data of this library.
+Run the script in the **promptfuzz/data** directory, to prepare the required data of this library.
 
-After the build process is finished, the data of this library is stored under **prompt_fuzz/output/build/**.
+After the build process is finished, the data of this library is stored under **promptfuzz/output/build/**.
 
 ### 2. Export LLM Service Environments
-PromptFuzz use OPENAI API as the backend LLM service interfaces, and you need to set up the following environment variables to access your LLM service:
+CNTG use OPENAI API as the backend LLM service interfaces, and you need to set up the following environment variables to access your LLM service:
 
 - `OPENAI_API_KEY`: Your LLM service access key.
 - `OPENAI_MODEL_NAME`: Your LLM service model name.
@@ -64,24 +69,19 @@ If you want to use a proxy server to access the LLM service, you can set the fol
 user@ubuntu$ export OPENAI_PROXY_BASE=https://openai.proxy.com/v1
 ```
 
-> If you need to run PromptFuzz on your local models, you should use [vllm](https://github.com/vllm-project/vllm) or other inference engines to deploy your LLM service first.
+> If you need to run CNTG on your local models, you should use [vllm](https://github.com/vllm-project/vllm) or other inference engines to deploy your LLM service first.
 
 ### 4. Generate Fuzz drivers
 
-PromptFuzz generates fuzz drivers in a fuzz loop. There are several options that can be tuned in the configuration of promptfuzz.
+CNTG generates API sequences. There are several options that can be tuned in the configuration.
 
-Typically, the only options that need to be actively set are `-c` and `-r`. The `-c` option determines the number of cores to be used for sanitization. For numerous fuzzing corpus, increse the number of cores could significantly decrease the time used for execution sanitization. Enabling the `-r` option will periodically re-check the correctness of the seed programs, reducing false positives but also introducing some extra overhead.
+Typically, the only options that need to be actively set are `-c` and `-r`. The
+`-c` option determines the number of cores to be used for sanitization. Enabling
+the `-r` option will periodically re-check the correctness of the seed programs,
+reducing false positives but also introducing some extra overhead.
 
-For instance, the following command is sufficient to perform fuzzing on libaom:
-```
-cargo run --bin fuzzer -- libaom -c $(nproc) -r
-```
-
-The detailed configurations of promptfuzz:
-
-```
-user@ubuntu$ cargo run --bin fuzzer -- --help
-```
+For instance, the following command is sufficient to generate API sequences for
+zlib
 ```
 cd /data/zlib
 
@@ -89,109 +89,20 @@ cd /data/zlib
 
 export OPENAI_MODEL_NAME="gpt-4o-mini-2024-07-18"
 cargo run --bin fuzzer -- zlib -c $(nproc) -r
-
-### 5. Run fuzz drivers
-Once the fuzz drivers generated finish, you should follow the follow steps to run the fuzz drivers and detect bugs.
-
-Take libaom is an example, you can run this command to fuse the programs into a fuzz driver that can be fuzzed:
-
-`cargo run --bin harness -- libaom fuse-fuzzer`
-
-And, you can execute the fuzzers you fused:
-
-`cargo run --bin harness -- libaom fuzzer-run`
-
-> Note that, promptfuzz implements the mechanism to detect the crashed program inside the fused fuzz driver.
- If a crash of a program has detected, promptfuzz will disable the code of the crashed program, which enables an continuously fuzzing. So, ensure that executing the fuzz drivers in PromptFuzz.
-
-After 24 hours execution(s), you should deduplicate the reported crashes by PromptFuzz:
-
-`cargo run --bin harness -- libaom sanitize-crash`
-
-
-Then, you can collect and verbose the code coverage of your fuzzers by:
-
-`cargo run --bin harness -- libaom coverage collect`
-
-and 
-
-`cargo run --bin harness -- libaom coverage report`
-
-
-## 🎈Advance Usage
-We also provide a harness named `harness` to facilitate you access some core components of PromptFuzz.
-
-Here is the command input of `harness`:
 ```
-#[derive(Subcommand, Debug)]
-enum Commands {
-    /// check a program whether is correct.
-    Check { program: PathBuf },
-    /// Recheck the seeds whether are correct.
-    ReCheck,
-    /// transform a program to a fuzzer.
-    Transform {
-        program: PathBuf,
-        #[arg(short, default_value = "true")]
-        use_cons: bool,
-        /// corpora used to perform transform check
-        #[arg(short = 'p', default_value = "None")]
-        corpora: Option<PathBuf>,
-    },
-    /// Fuse the programs in seeds to fuzzers.
-    FuseFuzzer {
-        /// transform fuzzer with constraints
-        #[arg(short, default_value = "true")]
-        use_cons: bool,
-        /// the number of condensed fuzzer you want to fuse
-        #[arg(short, default_value = "1")]
-        n_fuzzer: usize,
-        /// the count of cpu cores you could use
-        #[arg(short, default_value = "10")]
-        cpu_cores: usize,
-        seed_dir: Option<PathBuf>,
-    },
-    /// Run a synthesized fuzzer in the fuzz dir.
-    FuzzerRun {
-        /// which fuzzer you want to run. default is "output/$Library/fuzzers"
-        #[arg(short = 'u', default_value = "true")]
-        use_cons: bool,
-        /// the amount of time you wish your fuzzer to run. The default is 86400s (24 hours), the unit is second. 0 is for unlimit.
-        time_limit: Option<u64>,
-        /// whether minimize the fuzzing corpus before running
-        minimize: Option<bool>,
-    },
-    /// collect code coverage
-    Coverage {
-        /// Coverage kind to collect
-        kind: CoverageKind,
-        /// -u means the exploit fuzzers
-        #[arg(short = 'u', default_value = "true")]
-        exploit: bool,
-    },
-    Compile {
-        kind: Compile,
-        #[arg(short = 'u', default_value = "true")]
-        exploit: bool,
-    },
-    /// infer constraints
-    Infer,
-    /// Minimize the seeds by unique branches.
-    Minimize,
-    /// Sanitize duplicate and spurious crashes
-    SanitizeCrash {
-        #[arg(short = 'u', default_value = "true")]
-        exploit: bool,
-    },
-    /// archive the results
-    Archive { suffix: Option<String> },
-    ///  Build ADG from seeds
-    Adg {
-        /// ADG kind to build: sparse or dense
-        kind: ADGKind,
-        /// The path of target programs to build the ADG.
-        target: Option<PathBuf>,
-    },
-}
 
-```
+### 5. Benchmarking API Combinations
+
+Once the API sequences are generated, you can fuse them into a single executable and collect coverage to benchmark the effectiveness of the generated API combinations.
+
+Take `zlib` as an example. You can run this command to fuse the programs into a single executable:
+
+`cargo run --bin harness -- zlib cntg-fuse`
+
+And then, you can collect the coverage of the fused program:
+
+`cargo run --bin harness -- zlib collect-cntg`
+
+To get a human-readable coverage report, you can use the `report-cntg` command. This command will first collect the coverage and then generate a report.
+
+`cargo run --bin harness -- zlib report-cntg`

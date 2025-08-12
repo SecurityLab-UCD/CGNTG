@@ -536,6 +536,55 @@ impl Executor {
         Ok(())
     }
 
+    pub fn collect_cntg_cov_per_core(&self, core_dir: &Path) -> Result<()> {
+        log::trace!("collect cov for CNTG core: {core_dir:?}");
+        
+        let core_binary: PathBuf = [PathBuf::from(core_dir), "core".into()].iter().collect();
+        if !core_binary.exists() {
+            eyre::bail!("CNTG core binary not found: {core_binary:?}");
+        }
+
+        // Run the CNTG core and collect coverage
+        let profdata: PathBuf = crate::deopt::Deopt::get_coverage_file_by_dir(core_dir);
+        self.execute_cov_cntg_core(&core_binary, &profdata)?;
+        Ok(())
+    }
+
+    pub fn collect_cntg_cov_all_cores(&self, cntg_dir: &Path) -> Result<()> {
+        let mut cov_data = Vec::new();
+        for entry in std::fs::read_dir(cntg_dir)? {
+            let core_dir = entry?.path();
+            if !core_dir.is_dir() {
+                continue;
+            }
+            
+            let res = self.collect_cntg_cov_per_core(&core_dir);
+            if res.is_ok() {
+                let profdata: PathBuf = crate::deopt::Deopt::get_coverage_file_by_dir(&core_dir);
+                log::debug!("collect CNTG core cov finished: {core_dir:?}");
+                cov_data.push(profdata);
+            } else {
+                log::error!("{:?}", res.err().unwrap());
+            }
+        }
+
+        if cov_data.is_empty() {
+            eyre::bail!("No CNTG cores found or no coverage data collected");
+        }
+
+        // Merge all coverage data into a single profdata file
+        let mut binding = Command::new("llvm-profdata");
+        let output = binding.current_dir(cntg_dir).arg("merge").arg("-sparse");
+        for data in cov_data {
+            output.arg(data);
+        }
+        let output = output.arg("-o").arg("default.profdata").output()?;
+        if !output.status.success() {
+            eyre::bail!("merge CNTG cov_data fail!")
+        }
+        Ok(())
+    }
+
     pub fn report_lib_cov_all_fuzzers(&self, fuzzers_dir: &Path) -> Result<()> {
         let mut coverages: Vec<(CodeCoverage, PathBuf)> = Vec::new();
         let total_profdata: PathBuf = [PathBuf::from(fuzzers_dir), "default.profdata".into()]

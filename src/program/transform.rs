@@ -60,6 +60,21 @@ impl<'a> Transformer<'a> {
         Ok(transformer)
     }
 
+    /// Create a transformer for CNTG programs with main as test_<library>_api_sequence
+    pub fn new_cntg(src_file: &Path, deopt: &'a Deopt) -> Result<Self> {
+        let mut out_file = PathBuf::from(src_file);
+        out_file.set_extension("cc");
+        let library_name = deopt.project_name.clone();
+        let function_name = format!("test_{}_api_sequence", library_name);
+        let transformer = Self {
+            src_file: out_file,
+            deopt,
+            main: function_name,
+            fuzzer_shim: FuzzerShim::new(),
+        };
+        Ok(transformer)
+    }
+
     /// create a copy and without change self code.
     pub fn without_self_change(mut self) -> Self {
         let out_file = self.src_file.with_extension("transform.cc");

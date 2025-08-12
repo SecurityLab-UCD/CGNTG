@@ -38,6 +38,7 @@ pub enum Compile {
     SANITIZE,
     FUZZER,
     COVERAGE,
+    CoverageNoFuzz,
     Minimize,
     Normal,
 }
@@ -76,6 +77,11 @@ impl Executor {
             Compile::COVERAGE => {
                 let flags = crate::config::COVERAGE_FLAGS.to_vec();
                 let cov_lib = crate::deopt::utils::get_cov_lib_path(&self.deopt, false);
+                (flags, cov_lib)
+            }
+            Compile::CoverageNoFuzz => {
+                let flags = crate::config::COVERAGE_FLAGS_NO_FUZZ.to_vec();
+                let cov_lib = crate::deopt::utils::get_cov_no_fuzz_lib_path(&self.deopt, false);
                 (flags, cov_lib)
             }
             Compile::Minimize => {
@@ -357,6 +363,41 @@ impl Executor {
                 let err_msg = get_child_err(err);
                 log::error!("Error: {err_msg}");
             }
+        }
+        Ok(())
+    }
+
+    pub fn execute_cov_cntg_core(
+        &self,
+        core_binary: &Path,
+        profdata: &Path,
+    ) -> Result<()> {
+        let core_dir = get_file_dirname(core_binary);
+        let profraw_file: PathBuf = [core_dir.clone(), "core.profraw".into()].iter().collect();
+        
+        // Remove existing profraw file if it exists
+        if profraw_file.exists() {
+            std::fs::remove_file(&profraw_file)?;
+        }
+        
+        // Run the CNTG core with coverage
+        let output = Command::new(core_binary)
+            .env("LLVM_PROFILE_FILE", &profraw_file)
+            .output()?;
+        
+        if !output.status.success() {
+            log::warn!("execute CNTG core failed! {core_binary:?}");
+            let err_msg = String::from_utf8_lossy(&output.stderr);
+            log::error!("Error: {err_msg}");
+        }
+        
+        // Convert profraw to profdata
+        let profraws = vec![profraw_file];
+        Self::merge_profdata(&profraws, profdata)?;
+        
+        // Clean up the profraw file
+        if profdata.exists() {
+            std::fs::remove_file(&profraws[0])?;
         }
         Ok(())
     }
