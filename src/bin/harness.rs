@@ -61,6 +61,8 @@ enum Commands {
     },
     /// Collect coverage for CNTG fused programs
     CollectCNTG,
+    /// Report coverage for CNTG fused programs
+    ReportCNTG,
     /// Run a synthesized fuzzer in the fuzz dir.
     FuzzerRun {
         /// which fuzzer you want to run. default is "output/$Library/fuzzers"
@@ -259,6 +261,41 @@ fn collect_cntg(project: String) -> Result<()> {
     Ok(())
 }
 
+fn report_cntg(project: String) -> Result<()> {
+    let deopt = Deopt::new(project)?;
+    let cntg_dir = deopt.get_library_cntg_dir()?;
+    if !cntg_dir.exists() {
+        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'cntg-fuse' first.");
+    }
+
+    // 1. Collect coverage
+    let executor = Executor::new(&deopt)?;
+    executor.collect_cntg_cov_all_cores(&cntg_dir)?;
+    log::info!("CNTG coverage collection completed successfully");
+
+    // 2. Report coverage
+    let profdata_path: PathBuf = [cntg_dir.clone(), "default.profdata".into()].iter().collect();
+    if !profdata_path.exists() {
+        eyre::bail!("default.profdata not found in {cntg_dir:?}.");
+    }
+
+    let cov_lib = crate::deopt::utils::get_cov_lib_path(&deopt, true);
+
+    let output = Command::new("llvm-cov")
+        .arg("report")
+        .arg(cov_lib)
+        .arg(format!("--instr-profile={}", profdata_path.to_string_lossy()))
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()?;
+
+    if !output.status.success() {
+        eyre::bail!("llvm-cov report failed!");
+    }
+
+    Ok(())
+}
+
 fn compile_fuzzer(project: String, kind: Compile, exploit: bool) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let executor = Executor::new(&deopt)?;
@@ -448,10 +485,23 @@ fn main() -> ExitCode {
         Commands::CNTGFuse {
             seed_dir,
         } => {
-            cntg_fuse(project, seed_dir).unwrap();
+            if let Err(err) = cntg_fuse(project, seed_dir) {
+                log::error!("Failed to fuse CNTG programs: {}", err);
+                return ExitCode::FAILURE;
+            }
         }
         Commands::CollectCNTG => {
-            collect_cntg(project).unwrap();
+            if let Err(err) = collect_cntg(project) {
+                log::error!("Failed to collect CNTG coverage: {}", err);
+                return ExitCode::FAILURE;
+            }
+            return ExitCode::SUCCESS;
+        }
+        Commands::ReportCNTG => {
+            if let Err(err) = report_cntg(project) {
+                log::error!("Failed to report CNTG coverage: {}", err);
+                return ExitCode::FAILURE;
+            }
             return ExitCode::SUCCESS;
         }
         Commands::Minimize => {

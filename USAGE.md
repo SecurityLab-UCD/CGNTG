@@ -119,6 +119,26 @@ and
 `cargo run --bin harness -- libaom coverage report`
 
 
+## 🔬 CNTG Usage
+
+This section describes how to use the Crash-Neutral Test Generation (CNTG) functionality.
+
+### Benchmarking API Combinations
+
+Once the API sequences are generated, you can fuse them into a single executable and collect coverage to benchmark the effectiveness of the generated API combinations.
+
+Take `zlib` as an example. You can run this command to fuse the programs into a single executable:
+
+`cargo run --bin harness -- zlib cntg-fuse`
+
+And then, you can collect the coverage of the fused program:
+
+`cargo run --bin harness -- zlib collect-cntg`
+
+To get a human-readable coverage report, you can use the `report-cntg` command. This command will first collect the coverage and then generate a report.
+
+`cargo run --bin harness -- zlib report-cntg`
+
 ## 🎈Advance Usage
 We also provide a harness named `harness` to facilitate you access some core components of PromptFuzz.
 
