@@ -59,6 +59,8 @@ enum Commands {
         /// the path of seeds to fuse
         seed_dir: Option<PathBuf>,
     },
+    /// Collect coverage for CNTG fused programs
+    CollectCNTG,
     /// Run a synthesized fuzzer in the fuzz dir.
     FuzzerRun {
         /// which fuzzer you want to run. default is "output/$Library/fuzzers"
@@ -239,6 +241,21 @@ fn cntg_fuse(
     cntg_program.transform()?;
     cntg_program.synthesis()?;
     cntg_program.compile()?;
+    Ok(())
+}
+
+fn collect_cntg(project: String) -> Result<()> {
+    let deopt = Deopt::new(project)?;
+    let cntg_dir = deopt.get_library_cntg_dir()?;
+    
+    if !cntg_dir.exists() {
+        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'cntg-fuse' first.");
+    }
+    
+    let executor = Executor::new(&deopt)?;
+    executor.collect_cntg_cov_all_cores(&cntg_dir)?;
+    
+    log::info!("CNTG coverage collection completed successfully");
     Ok(())
 }
 
@@ -432,6 +449,10 @@ fn main() -> ExitCode {
             seed_dir,
         } => {
             cntg_fuse(project, seed_dir).unwrap();
+        }
+        Commands::CollectCNTG => {
+            collect_cntg(project).unwrap();
+            return ExitCode::SUCCESS;
         }
         Commands::Minimize => {
             let deopt = Deopt::new(project).unwrap();

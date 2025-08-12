@@ -367,6 +367,41 @@ impl Executor {
         Ok(())
     }
 
+    pub fn execute_cov_cntg_core(
+        &self,
+        core_binary: &Path,
+        profdata: &Path,
+    ) -> Result<()> {
+        let core_dir = get_file_dirname(core_binary);
+        let profraw_file: PathBuf = [core_dir.clone(), "core.profraw".into()].iter().collect();
+        
+        // Remove existing profraw file if it exists
+        if profraw_file.exists() {
+            std::fs::remove_file(&profraw_file)?;
+        }
+        
+        // Run the CNTG core with coverage
+        let output = Command::new(core_binary)
+            .env("LLVM_PROFILE_FILE", &profraw_file)
+            .output()?;
+        
+        if !output.status.success() {
+            log::warn!("execute CNTG core failed! {core_binary:?}");
+            let err_msg = String::from_utf8_lossy(&output.stderr);
+            log::error!("Error: {err_msg}");
+        }
+        
+        // Convert profraw to profdata
+        let profraws = vec![profraw_file];
+        Self::merge_profdata(&profraws, profdata)?;
+        
+        // Clean up the profraw file
+        if profdata.exists() {
+            std::fs::remove_file(&profraws[0])?;
+        }
+        Ok(())
+    }
+
     pub fn execute_cov_fuzzer_pool(
         &self,
         fuzzer_binary: &Path,
