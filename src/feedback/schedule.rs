@@ -202,6 +202,10 @@ impl Schedule {
             if comb.contains(&api) {
                 continue;
             }
+            // 打印本次选中的API及其能量
+            if let Some(seed) = self.seeds.get(api) {
+                log::info!("choose api: {} energy: {}", api, seed.energy);
+            }
             comb.push(api);
             let gadget =
                 get_func_gadget(api).unwrap_or_else(|| panic!("cannot found api {api} in gadgets"));

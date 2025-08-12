@@ -307,7 +307,7 @@ pub const ERROR_REPAIR_TEMPLATE: &str =
 Error code:{error_code}
 Error Type: {error_type}
 Error Details:{error_details}
-Please regenerate a new program to repair the error without changing the logic, do not redefine main function
+Please regenerate a new program to repair the error without changing the logic, do not redefine main function and any other parameters, and do not change the function name.
 ";
 
 pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically correct C++ function named `int test_{project}_api_sequence()` using the {project} library.
@@ -320,10 +320,11 @@ Function Requirements:
 1. The function must return `66` on success.  
 2. Any `if` branch must return a code other than 66.  
 3. You must not redefine or include the {project} library.  
-4. Do not use `std::memset`; use plain `memset`.  
+4. Do not use `std::memset`; use plain `memset`.  do not create new functions, use the existing APIs.
 5. The function must end with:
    API sequence test completed successfully
-
+6. When you enter a new phase, use `// step ...` to indicate the phase. different operations are in different steps, limit steps to 6
+7. In the generated API sequence, you **must include at least one edge-case scenario** (e.g., empty input buffer, invalid dictionary, zero-length output). Try to construct the sequence to test library robustness under minimal or malformed inputs.
 Code Quality Rules:
 
 - The function must be self-contained: declare, initialize, and clean up all variables and resources.
@@ -344,12 +345,12 @@ int test_{project}_api_sequence() {
     // Step 1: Declarations
     // Step 2: Setup
     // Step 3: Core operations
-    // Step 4: Cleanup
-   //output API sequence test completed successfully
+    // Step ...
+    // step ... : Cleanup
     return 66;
 }";
 
-pub const USER_GEN_TEMPLATE: &str = "Create a C++ language program step by step by using {project} library APIs and following the instructions below:
+pub const USER_GEN_TEMPLATE: &str = "Create a C language program step by step by using {project} library APIs and following the instructions below:
 1. Here are several APIs in {project}. Specific an event that those APIs could achieve together, if the input is a byte stream of {project}' output data.
 {combinations};
 2. Complete the LLVMFuzzerTestOneInput function to achieve this event by using those APIs. Each API should be called at least once, if possible.
