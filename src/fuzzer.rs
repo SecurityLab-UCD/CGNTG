@@ -396,10 +396,10 @@ impl Fuzzer {
         } else if get_config().generation_mode == config::GenerationModeP::ApiCombination {
             //    log::info!("Using api combination mode, initial prompt: {prompt:?}");
             self.schedule.initialize_energies_for_api_mode();
-            let mut file = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("output111.txt")?;
+            // let mut file = std::fs::OpenOptions::new()
+            //     .create(true)
+            //     .append(true)
+            //     .open("output111.txt")?;
             loop {
                 if self.is_converge() {
                     break;
@@ -424,17 +424,28 @@ impl Fuzzer {
                 let mut successful_programs_this_round: Vec<Program> = Vec::new();
                 for program in programs {
                     self.deopt.save_succ_program(&program)?;
-                    println!("Program ID: {}", program.id);
                     let cpp_code = &program.statements;
                     let calls = Self::extract_function_calls(cpp_code);
                     let pairs = Self::extract_2gram_pairs(&calls);
+
+                    // 保存API pairs到新文件
+                    let pairs_dir = self.deopt.get_library_succ_seed_dir()?.join("pairs");
+                    if !pairs_dir.exists() {
+                        std::fs::create_dir_all(&pairs_dir)?;
+                    }
+                    let pairs_path = pairs_dir.join(format!("{}.pairs", program.id));
+                    let mut pairs_file = std::fs::File::create(pairs_path)?;
+                    for pair in &pairs {
+                        writeln!(pairs_file, "(\"{}\", \"{}\")", pair.0, pair.1)?;
+                    }
+
                     successful_programs_this_round.push(program.clone());
                     let mut discovered_pairs_guard =
                         self.observer.discovered_api_pairs.write().unwrap();
                     for pair in pairs {
                         // log::debug!("Discovered API pair: {:?}", pair);
                         if discovered_pairs_guard.insert(pair.clone()) {
-                            writeln!(file, "{:?}", pair)?;
+                          //  writeln!(file, "{:?}", pair)?;
                             round_newly_discovered_pairs.insert(pair);
                         }
                     }
