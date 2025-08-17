@@ -328,7 +328,7 @@ Here are some successful examples:
 {successful_examples}
 Function Requirements:
 1. The function must return `66` on success.  
-2. Any `if` branch must return a code other than 66.  
+2. Do not include if branches or loops; the function should be a straight-line sequence of API calls.
 3. You must not redefine or include the {project} library.  
 4. Do not use `std::memset`; use plain `memset`.  do not create new functions, use the existing APIs.
 5. The function must end with:

@@ -674,6 +674,8 @@ pub mod utils {
         headers.push("fstream".to_string());
         headers.push("iostream".to_string());
         headers.push("sstream".to_string());
+        headers.push("cstring".to_string());
+        headers.push("fcntl.h".to_string());
         Ok(headers)
     }
 

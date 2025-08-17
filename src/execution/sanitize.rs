@@ -172,6 +172,7 @@ impl Executor {
         )?;
         write!(temp_file, "#include <iostream>\n")?;
         write!(temp_file, "#include <stdio.h>\n")?;
+        write!(temp_file, "#include <fcntl.h>\n")?;
         let project_name = get_library_name();
         writeln!(temp_file, "{}", program.statements)?;
         //log::debug!("Program: {}", program.statements);
