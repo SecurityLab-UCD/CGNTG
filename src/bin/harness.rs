@@ -20,17 +20,17 @@ pub struct Config {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Fuse the api combination in seeds to a single executable.
-    CNTGFuse {
+    FuseSeeds {
         /// the path of seeds to fuse
         seed_dir: Option<PathBuf>,
     },
     /// Collect coverage for CNTG fused programs
-    CollectCNTG,
+    CollectCoverage,
     /// Report coverage for CNTG fused programs
-    ReportCNTG,
+    ReportCoverage,
 }
 
-fn cntg_fuse(
+fn fuse_seeds(
     project: String,
     seed_dir: &Option<PathBuf>,
 ) -> Result<()> {
@@ -52,12 +52,12 @@ fn cntg_fuse(
     Ok(())
 }
 
-fn collect_cntg(project: String) -> Result<()> {
+fn collect_coverage(project: String) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let cntg_dir = deopt.get_library_cntg_dir()?;
     
     if !cntg_dir.exists() {
-        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'cntg-fuse' first.");
+        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'fuse-seeds' first.");
     }
     
     let executor = Executor::new(&deopt)?;
@@ -67,11 +67,11 @@ fn collect_cntg(project: String) -> Result<()> {
     Ok(())
 }
 
-fn report_cntg(project: String) -> Result<()> {
+fn report_coverage(project: String) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let cntg_dir = deopt.get_library_cntg_dir()?;
     if !cntg_dir.exists() {
-        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'cntg-fuse' first.");
+        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'fuse-seeds' first.");
     }
 
     // 1. Collect coverage
@@ -107,24 +107,24 @@ fn main() -> ExitCode {
     prompt_fuzz::config::Config::init_test(&config.project);
     let project = config.project.clone();
     match &config.command {
-        Commands::CNTGFuse {
+        Commands::FuseSeeds {
             seed_dir,
         } => {
-            if let Err(err) = cntg_fuse(project, seed_dir) {
-                log::error!("Failed to fuse CNTG programs: {}", err);
+            if let Err(err) = fuse_seeds(project, seed_dir) {
+                log::error!("Failed to fuse seeds: {}", err);
                 return ExitCode::FAILURE;
             }
         }
-        Commands::CollectCNTG => {
-            if let Err(err) = collect_cntg(project) {
-                log::error!("Failed to collect CNTG coverage: {}", err);
+        Commands::CollectCoverage => {
+            if let Err(err) = collect_coverage(project) {
+                log::error!("Failed to collect coverage: {}", err);
                 return ExitCode::FAILURE;
             }
             return ExitCode::SUCCESS;
         }
-        Commands::ReportCNTG => {
-            if let Err(err) = report_cntg(project) {
-                log::error!("Failed to report CNTG coverage: {}", err);
+        Commands::ReportCoverage => {
+            if let Err(err) = report_coverage(project) {
+                log::error!("Failed to report coverage: {}", err);
                 return ExitCode::FAILURE;
             }
             return ExitCode::SUCCESS;
