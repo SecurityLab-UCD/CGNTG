@@ -71,7 +71,7 @@ user@ubuntu$ export OPENAI_PROXY_BASE=https://openai.proxy.com/v1
 
 > If you need to run CNTG on your local models, you should use [vllm](https://github.com/vllm-project/vllm) or other inference engines to deploy your LLM service first.
 
-### 4. Generate Fuzz drivers
+### 4. Generate seeds
 
 CNTG generates API sequences. There are several options that can be tuned in the configuration.
 

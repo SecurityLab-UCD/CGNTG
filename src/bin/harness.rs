@@ -28,6 +28,11 @@ enum Commands {
     CollectCoverage,
     /// Report coverage for CNTG fused programs
     ReportCoverage,
+    /// Create seeds, fuse them, and report coverage. Pass fuzzer arguments after the command.
+    All {
+        #[clap(raw = true)]
+        fuzzer_args: Vec<String>,
+    },
 }
 
 fn fuse_seeds(
@@ -102,6 +107,33 @@ fn report_coverage(project: String) -> Result<()> {
     Ok(())
 }
 
+fn create_seeds(project: &str, fuzzer_args: &[String]) -> Result<()> {
+    let mut cmd = Command::new("cargo");
+    cmd.arg("run")
+        .arg("--bin")
+        .arg("fuzzer")
+        .arg("--")
+        .arg(project)
+        .args(fuzzer_args);
+
+    let status = cmd.status()?;
+    if !status.success() {
+        eyre::bail!("Failed to create seeds for {project}");
+    }
+    Ok(())
+}
+
+fn all(project: String, fuzzer_args: &[String]) -> Result<()> {
+    // 1. Create seeds
+    create_seeds(&project, fuzzer_args)?;
+
+    // 2. Fuse seeds
+    fuse_seeds(project.clone(), &None)?;
+
+    // 3. Report coverage
+    report_coverage(project)
+}
+
 fn main() -> ExitCode {
     let config = Config::parse();
     prompt_fuzz::config::Config::init_test(&config.project);
@@ -125,6 +157,13 @@ fn main() -> ExitCode {
         Commands::ReportCoverage => {
             if let Err(err) = report_coverage(project) {
                 log::error!("Failed to report coverage: {}", err);
+                return ExitCode::FAILURE;
+            }
+            return ExitCode::SUCCESS;
+        }
+        Commands::All { fuzzer_args } => {
+            if let Err(err) = all(project, fuzzer_args) {
+                log::error!("Failed to run all: {}", err);
                 return ExitCode::FAILURE;
             }
             return ExitCode::SUCCESS;
