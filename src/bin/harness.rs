@@ -5,6 +5,7 @@ use prompt_fuzz::execution::Executor;
 use prompt_fuzz::program::cntg::CNTGProgram;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
+use std::io::Write;
 
 
 /// Command Parser
@@ -100,13 +101,18 @@ fn report_coverage(project: String) -> Result<()> {
         .arg("report")
         .arg(cov_lib)
         .arg(format!("--instr-profile={}", profdata_path.to_string_lossy()))
-        .stdout(Stdio::inherit())
+        .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .output()?;
 
     if !output.status.success() {
         eyre::bail!("llvm-cov report failed!");
     }
+
+    let mut cov_report_path = deopt.get_library_output_dir()?;
+    cov_report_path.push("coverage_report.txt");
+    std::fs::write(cov_report_path, &output.stdout)?;
+    std::io::stdout().write_all(&output.stdout)?;
 
     Ok(())
 }
