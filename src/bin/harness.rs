@@ -23,6 +23,9 @@ enum Commands {
     FuseSeeds {
         /// the path of seeds to fuse
         seed_dir: Option<PathBuf>,
+        /// The batch size of files to be fused together
+        #[clap(short, long)]
+        batch_size: Option<usize>,
     },
     /// Collect coverage for CNTG fused programs
     CollectCoverage,
@@ -38,6 +41,7 @@ enum Commands {
 fn fuse_seeds(
     project: String,
     seed_dir: &Option<PathBuf>,
+    batch_size: Option<usize>,
 ) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let test_dir: PathBuf = if let Some(seed_dir) = seed_dir {
@@ -47,9 +51,9 @@ fn fuse_seeds(
     };
     let programs = crate::deopt::utils::read_sort_dir(&test_dir)?;
     dbg!(&programs);
-    
-    let batch_size = programs.len(); // process in a single batch
-    
+
+    let batch_size = batch_size.unwrap_or(100);
+
     let mut cntg_program = CNTGProgram::new(programs, batch_size, deopt);
     cntg_program.transform()?;
     cntg_program.synthesis()?;
@@ -128,7 +132,7 @@ fn all(project: String, fuzzer_args: &[String]) -> Result<()> {
     create_seeds(&project, fuzzer_args)?;
 
     // 2. Fuse seeds
-    fuse_seeds(project.clone(), &None)?;
+    fuse_seeds(project.clone(), &None, None)?;
 
     // 3. Report coverage
     report_coverage(project)
@@ -141,8 +145,9 @@ fn main() -> ExitCode {
     match &config.command {
         Commands::FuseSeeds {
             seed_dir,
+            batch_size,
         } => {
-            if let Err(err) = fuse_seeds(project, seed_dir) {
+            if let Err(err) = fuse_seeds(project, seed_dir, *batch_size) {
                 log::error!("Failed to fuse seeds: {}", err);
                 return ExitCode::FAILURE;
             }
