@@ -39,6 +39,9 @@ pub fn minimize_by_api_pairs(deopt: &Deopt) -> Result<()> {
     // 1. Get all successful programs and the API pairs they contain.
     let mut programs_with_pairs: Vec<(PathBuf, HashSet<(String, String)>)> = Vec::new();
     for file in crate::deopt::utils::read_sort_dir(&succ_seeds_dir)? {
+        if file.is_dir() {
+            continue;
+        }
         let program = Program::load_from_path(&file)?;
         let pairs = extract_api_pairs_from_program(&program);
         if !pairs.is_empty() {

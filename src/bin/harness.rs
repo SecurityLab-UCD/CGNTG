@@ -5,6 +5,7 @@ use prompt_fuzz::execution::Executor;
 use prompt_fuzz::program::cntg::CNTGProgram;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
+use std::io::Write;
 
 
 /// Command Parser
@@ -20,19 +21,28 @@ pub struct Config {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Fuse the api combination in seeds to a single executable.
-    CNTGFuse {
+    FuseSeeds {
         /// the path of seeds to fuse
         seed_dir: Option<PathBuf>,
+        /// The batch size of files to be fused together
+        #[clap(short, long)]
+        batch_size: Option<usize>,
     },
     /// Collect coverage for CNTG fused programs
-    CollectCNTG,
+    CollectCoverage,
     /// Report coverage for CNTG fused programs
-    ReportCNTG,
+    ReportCoverage,
+    /// Create seeds, fuse them, and report coverage. Pass fuzzer arguments after the command.
+    All {
+        #[clap(raw = true)]
+        fuzzer_args: Vec<String>,
+    },
 }
 
-fn cntg_fuse(
+fn fuse_seeds(
     project: String,
     seed_dir: &Option<PathBuf>,
+    batch_size: Option<usize>,
 ) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let test_dir: PathBuf = if let Some(seed_dir) = seed_dir {
@@ -42,9 +52,9 @@ fn cntg_fuse(
     };
     let programs = crate::deopt::utils::read_sort_dir(&test_dir)?;
     dbg!(&programs);
-    
-    let batch_size = programs.len(); // process in a single batch
-    
+
+    let batch_size = batch_size.unwrap_or(100);
+
     let mut cntg_program = CNTGProgram::new(programs, batch_size, deopt);
     cntg_program.transform()?;
     cntg_program.synthesis()?;
@@ -52,12 +62,12 @@ fn cntg_fuse(
     Ok(())
 }
 
-fn collect_cntg(project: String) -> Result<()> {
+fn collect_coverage(project: String) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let cntg_dir = deopt.get_library_cntg_dir()?;
     
     if !cntg_dir.exists() {
-        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'cntg-fuse' first.");
+        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'fuse-seeds' first.");
     }
     
     let executor = Executor::new(&deopt)?;
@@ -67,11 +77,11 @@ fn collect_cntg(project: String) -> Result<()> {
     Ok(())
 }
 
-fn report_cntg(project: String) -> Result<()> {
+fn report_coverage(project: String) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let cntg_dir = deopt.get_library_cntg_dir()?;
     if !cntg_dir.exists() {
-        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'cntg-fuse' first.");
+        eyre::bail!("CNTG directory not found: {cntg_dir:?}. Please run 'fuse-seeds' first.");
     }
 
     // 1. Collect coverage
@@ -91,7 +101,7 @@ fn report_cntg(project: String) -> Result<()> {
         .arg("report")
         .arg(cov_lib)
         .arg(format!("--instr-profile={}", profdata_path.to_string_lossy()))
-        .stdout(Stdio::inherit())
+        .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .output()?;
 
@@ -99,7 +109,39 @@ fn report_cntg(project: String) -> Result<()> {
         eyre::bail!("llvm-cov report failed!");
     }
 
+    let mut cov_report_path = deopt.get_library_output_dir()?;
+    cov_report_path.push("coverage_report.txt");
+    std::fs::write(cov_report_path, &output.stdout)?;
+    std::io::stdout().write_all(&output.stdout)?;
+
     Ok(())
+}
+
+fn create_seeds(project: &str, fuzzer_args: &[String]) -> Result<()> {
+    let mut cmd = Command::new("cargo");
+    cmd.arg("run")
+        .arg("--bin")
+        .arg("fuzzer")
+        .arg("--")
+        .arg(project)
+        .args(fuzzer_args);
+
+    let status = cmd.status()?;
+    if !status.success() {
+        eyre::bail!("Failed to create seeds for {project}");
+    }
+    Ok(())
+}
+
+fn all(project: String, fuzzer_args: &[String]) -> Result<()> {
+    // 1. Create seeds
+    create_seeds(&project, fuzzer_args)?;
+
+    // 2. Fuse seeds
+    fuse_seeds(project.clone(), &None, None)?;
+
+    // 3. Report coverage
+    report_coverage(project)
 }
 
 fn main() -> ExitCode {
@@ -107,24 +149,32 @@ fn main() -> ExitCode {
     prompt_fuzz::config::Config::init_test(&config.project);
     let project = config.project.clone();
     match &config.command {
-        Commands::CNTGFuse {
+        Commands::FuseSeeds {
             seed_dir,
+            batch_size,
         } => {
-            if let Err(err) = cntg_fuse(project, seed_dir) {
-                log::error!("Failed to fuse CNTG programs: {}", err);
+            if let Err(err) = fuse_seeds(project, seed_dir, *batch_size) {
+                log::error!("Failed to fuse seeds: {}", err);
                 return ExitCode::FAILURE;
             }
         }
-        Commands::CollectCNTG => {
-            if let Err(err) = collect_cntg(project) {
-                log::error!("Failed to collect CNTG coverage: {}", err);
+        Commands::CollectCoverage => {
+            if let Err(err) = collect_coverage(project) {
+                log::error!("Failed to collect coverage: {}", err);
                 return ExitCode::FAILURE;
             }
             return ExitCode::SUCCESS;
         }
-        Commands::ReportCNTG => {
-            if let Err(err) = report_cntg(project) {
-                log::error!("Failed to report CNTG coverage: {}", err);
+        Commands::ReportCoverage => {
+            if let Err(err) = report_coverage(project) {
+                log::error!("Failed to report coverage: {}", err);
+                return ExitCode::FAILURE;
+            }
+            return ExitCode::SUCCESS;
+        }
+        Commands::All { fuzzer_args } => {
+            if let Err(err) = all(project, fuzzer_args) {
+                log::error!("Failed to run all: {}", err);
                 return ExitCode::FAILURE;
             }
             return ExitCode::SUCCESS;
