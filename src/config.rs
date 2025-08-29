@@ -321,7 +321,7 @@ pub const ERROR_REPAIR_TEMPLATE: &str =
 Error code:{error_code}
 Error Type: {error_type}
 Error Details:{error_details}
-Please regenerate a new program to repair the error without changing the logic, do not redefine main function and any other parameters, and do not change the function name.
+Please regenerate a new program to repair the error without changing the logic, do not redefine main function and any other parameters even if the error is not defined, and do not change the function name.
 ";
 
 pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically correct C++ function named `int test_{project}_api_sequence()` using the {project} library.
@@ -339,8 +339,11 @@ Function Requirements:
    API sequence test completed successfully
 6. When you enter a new phase, use `// step ...` to indicate the phase. different operations are in different steps, limit steps to 6
 7. In the generated API sequence, you **must include at least one edge-case scenario** (e.g., empty input buffer, invalid dictionary, zero-length output). Try to construct the sequence to test library robustness under minimal or malformed inputs.
-Code Quality Rules:
 
+Below is project's specific rules:
+{project_rules}
+
+Code Quality Rules:
 - The function must be self-contained: declare, initialize, and clean up all variables and resources.
 - The API sequence should follow a realistic and complete usage pattern:
   - Initialize → Configure → Operate → Validate → Cleanup
@@ -376,7 +379,18 @@ pub const USER_GEN_TEMPLATE: &str = "Create a C language program step by step by
 6. Once you just need a string of file name, directly using \"input_file\" or \"output_file\" as the file name.
 7. Release all allocated resources before return.
 ";
-
+pub fn get_project_rules() -> String {
+    let library_name = get_library_name();
+    let mut template = USER_API_TEMPLATE.to_string();
+    if library_name == "cre2" {
+        template = template.replace("{project_rules}", "
+        1. Do not use CRE2_ANCHOR_UNANCHORED，use CRE2_UNANCHORED instead.
+        2. Do not use CRE2_ANCHOR_NONE
+        3.int cre2_full_match(const char * , const cre2_string_t * , cre2_string_t * , int ), Please note that cre2_full_match only have 4 parameters, not 5
+        ");
+    }
+    template
+}
 pub fn get_sys_gen_template() -> &'static str {
     let config = get_config();
     let generation_mode = config.generation_mode.clone();
