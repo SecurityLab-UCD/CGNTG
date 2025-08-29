@@ -97,12 +97,16 @@ Once the API sequences are generated, you can fuse them into a single executable
 
 Take `zlib` as an example. You can run this command to fuse the programs into a single executable:
 
-`cargo run --bin harness -- zlib cntg-fuse`
+`cargo run --bin harness -- zlib fuse-seeds`
 
 And then, you can collect the coverage of the fused program:
 
-`cargo run --bin harness -- zlib collect-cntg`
+`cargo run --bin harness -- zlib collect-coverage`
 
 To get a human-readable coverage report, you can use the `report-cntg` command. This command will first collect the coverage and then generate a report.
 
-`cargo run --bin harness -- zlib report-cntg`
+`cargo run --bin harness -- zlib report-coverage`
+
+
+
+

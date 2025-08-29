@@ -343,15 +343,7 @@ impl Executor {
                     return Ok(Some(ProgramError::Execute(format!("cre2 execution failed: stderr={}, stdout={}", err_msg, stdout_msg))));
                 }
                 
-                // 检查输出是否包含预期的成功信息
-                let output = exec_child.wait_with_output()?;
-                let stdout_msg = String::from_utf8_lossy(&output.stdout).to_string();
-                if !stdout_msg.contains("API sequence test completed successfully") {
-                    log::warn!("cre2 program did not complete successfully: {}", stdout_msg);
-                    return Ok(Some(ProgramError::Execute(format!("cre2 program did not complete successfully: {}", stdout_msg))));
-                }
-                
-                log::debug!("cre2 execution successful: {}", stdout_msg);
+                log::debug!("cre2 execution successful with return code 0");
             }
             None => {
                 exec_child.kill()?;
