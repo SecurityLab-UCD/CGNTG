@@ -321,7 +321,7 @@ pub const ERROR_REPAIR_TEMPLATE: &str =
 Error code:{error_code}
 Error Type: {error_type}
 Error Details:{error_details}
-Please regenerate a new program to repair the error without changing the logic, do not redefine main function and any other parameters, and do not change the function name.
+Please regenerate a new program to repair the error without changing the logic, do not redefine main function and any other parameters even if the error is not defined, and do not change the function name.
 ";
 
 pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically correct C++ function named `int test_{project}_api_sequence()` using the {project} library.
