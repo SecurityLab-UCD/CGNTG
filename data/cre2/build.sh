@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Also build special target. See script for detailed information
+./build-special.sh
+
 source ../common.sh
 
 PROJECT_NAME=cre2
