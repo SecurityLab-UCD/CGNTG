@@ -219,6 +219,9 @@ pub struct Config {
     /// Select the handler type for LLM requests
     #[arg(long = "handler", default_value = "openai")]
     pub handler_type: HandlerType,
+    /// Timeout in minutes for the seed generation phase
+    #[arg(long)]
+    pub seed_gen_timeout: Option<u64>,
 }
 
 impl Config {
@@ -237,6 +240,7 @@ impl Config {
             fuzzer_run: false,
             disable_power_schedule: false,
             handler_type: HandlerType::Openai,
+            seed_gen_timeout: None,
         };
         let _ = CONFIG_INSTANCE.set(RwLock::new(config));
         crate::init_debug_logger().unwrap();
@@ -287,14 +291,14 @@ impl LibConfig {
     }
 }
 
-/// Template of generative prompt in system role.
+/// Template of generative prompt in system role. 
 pub const SYSTEM_GEN_TEMPLATE: &str = "Act as a C++ langauge Developer, write a fuzz driver that follow user's instructions.
 The prototype of fuzz dirver is: `extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t data, size_t size)`.
 \n";
 pub const SYSTEM_API_TEMPLATE: &str = "Act as an API usage synthesizer. Generate valid combinations of available APIs from the target library, ensuring there are no logical or syntactical errors in the code.
 ";
 
-/// Template of providing the context of library's structures.
+/// Template of providing the context of library's structures. 
 pub const SYSTEM_CONTEXT_TEMPLATE: &str = "
 The fuzz dirver should focus on the usage of the {project} library, and several essential aspects of the library are provided below.
 Here are the system headers included in {project}. You can utilize the public elements of these headers:
@@ -317,7 +321,7 @@ pub const ERROR_REPAIR_TEMPLATE: &str =
 Error code:{error_code}
 Error Type: {error_type}
 Error Details:{error_details}
-Please regenerate a new program to repair the error without changing the logic, do not redefine main function and any other parameters, and do not change the function name.
+Please regenerate a new program to repair the error without changing the logic, do not redefine main function and any other parameters even if the error is not defined, and do not change the function name.
 ";
 
 pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically correct C++ function named `int test_{project}_api_sequence()` using the {project} library.
@@ -335,8 +339,11 @@ Function Requirements:
    API sequence test completed successfully
 6. When you enter a new phase, use `// step ...` to indicate the phase. different operations are in different steps, limit steps to 6
 7. In the generated API sequence, you **must include at least one edge-case scenario** (e.g., empty input buffer, invalid dictionary, zero-length output). Try to construct the sequence to test library robustness under minimal or malformed inputs.
-Code Quality Rules:
 
+Below is project's specific rules:
+{project_rules}
+
+Code Quality Rules:
 - The function must be self-contained: declare, initialize, and clean up all variables and resources.
 - The API sequence should follow a realistic and complete usage pattern:
   - Initialize → Configure → Operate → Validate → Cleanup
@@ -358,11 +365,12 @@ int test_{project}_api_sequence() {
     // Step ...
     // step ... : Cleanup
     return 66;
-}";
+}
+```";
 
 pub const USER_GEN_TEMPLATE: &str = "Create a C language program step by step by using {project} library APIs and following the instructions below:
 1. Here are several APIs in {project}. Specific an event that those APIs could achieve together, if the input is a byte stream of {project}' output data.
-{combinations};
+{combinations}; 
 2. Complete the LLVMFuzzerTestOneInput function to achieve this event by using those APIs. Each API should be called at least once, if possible.
 3. The input data and its size are passed as parameters of LLVMFuzzerTestOneInput: `const uint8_t *data` and `size_t size`. They must be consumed by the {project} APIs.
 4. Once you need a `FILE *` variable to read the input data, using `FILE * in_file = fmemopen((void *)data, size, \"rb\")` to produce a `FILE *` variable.
@@ -371,7 +379,18 @@ pub const USER_GEN_TEMPLATE: &str = "Create a C language program step by step by
 6. Once you just need a string of file name, directly using \"input_file\" or \"output_file\" as the file name.
 7. Release all allocated resources before return.
 ";
-
+pub fn get_project_rules() -> String {
+    let library_name = get_library_name();
+    let mut template = USER_API_TEMPLATE.to_string();
+    if library_name == "cre2" {
+        template = template.replace("{project_rules}", "
+        1. Do not use CRE2_ANCHOR_UNANCHORED，use CRE2_UNANCHORED instead.
+        2. Do not use CRE2_ANCHOR_NONE
+        3.int cre2_full_match(const char * , const cre2_string_t * , cre2_string_t * , int ), Please note that cre2_full_match only have 4 parameters, not 5
+        ");
+    }
+    template
+}
 pub fn get_sys_gen_template() -> &'static str {
     let config = get_config();
     let generation_mode = config.generation_mode.clone();

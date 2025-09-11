@@ -94,6 +94,8 @@ impl Executor {
     pub fn extract_header_ast(header: &Path, deopt: &Deopt) -> Result<Node> {
         let include_path =
             "-I".to_owned() + deopt.get_library_build_header_path()?.to_str().unwrap();
+        //println!("include path: {include_path}");
+       // println!("header path: {header:?}");
         let mut binding = Command::new("clang++");
         let binding = binding
             .arg("-fsyntax-only")

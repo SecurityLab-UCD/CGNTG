@@ -71,7 +71,7 @@ user@ubuntu$ export OPENAI_PROXY_BASE=https://openai.proxy.com/v1
 
 > If you need to run CNTG on your local models, you should use [vllm](https://github.com/vllm-project/vllm) or other inference engines to deploy your LLM service first.
 
-### 4. Generate Fuzz drivers
+### 4. Generate seeds
 
 CNTG generates API sequences. There are several options that can be tuned in the configuration.
 
@@ -97,12 +97,16 @@ Once the API sequences are generated, you can fuse them into a single executable
 
 Take `zlib` as an example. You can run this command to fuse the programs into a single executable:
 
-`cargo run --bin harness -- zlib cntg-fuse`
+`cargo run --bin harness -- zlib fuse-seeds`
 
 And then, you can collect the coverage of the fused program:
 
-`cargo run --bin harness -- zlib collect-cntg`
+`cargo run --bin harness -- zlib collect-coverage`
 
 To get a human-readable coverage report, you can use the `report-cntg` command. This command will first collect the coverage and then generate a report.
 
-`cargo run --bin harness -- zlib report-cntg`
+`cargo run --bin harness -- zlib report-coverage`
+
+
+
+

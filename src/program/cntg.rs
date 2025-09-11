@@ -1,6 +1,6 @@
 use crate::deopt::Deopt;
 use std::path::{Path, PathBuf};
-use eyre::{Context, Result};
+use eyre::{Context, Result, eyre};
 
 /// CNTGProgram represents a single executable created from multiple API combination programs.
 /// Unlike LibFuzzer, this keeps the original main() functions and fuses them into one binary.
@@ -185,20 +185,33 @@ impl CNTGProgram {
 
     pub fn compile(&self) -> Result<()> {
         let executor = crate::execution::Executor::new(&self.deopt)?;
-        for dir in std::fs::read_dir(self.deopt.get_library_cntg_dir()?)? {
-            let core_dir = dir?.path();
-            if core_dir.is_dir() {
-                log::info!("Compile to Core: {core_dir:?}");
-                let core_binary = get_core_path(&core_dir);
-                executor.compile_lib_fuzzers(
-                    &core_dir,
-                    &core_binary,
-                    crate::execution::Compile::CoverageNoFuzz,
-                )?;
-                self.deopt.copy_library_init_file(&core_dir)?;
+        std::thread::scope(|s| {
+            let mut handles = Vec::<std::thread::ScopedJoinHandle::<()>>::new();
+            for dir in std::fs::read_dir(self.deopt.get_library_cntg_dir().unwrap()).unwrap() {
+                handles.push(
+                    s.spawn(|| {
+                        let core_dir = dir.unwrap().path();
+                        if core_dir.is_dir() {
+                            log::info!("Compile to Core: {core_dir:?}");
+                            let core_binary = get_core_path(&core_dir);
+                            executor.compile_lib_fuzzers(
+                                &core_dir,
+                                &core_binary,
+                                crate::execution::Compile::CoverageNoFuzz,
+                            ).unwrap();
+                            self.deopt.copy_library_init_file(&core_dir).unwrap();
+                        }
+                    })
+                );
             }
-        }
-        Ok(())
+            for handle in handles {
+                let result = handle.join();
+                if result.is_err() {
+                    return Err(eyre!(""));
+                }
+            }
+            return Ok(());
+        })
     }
 }
 

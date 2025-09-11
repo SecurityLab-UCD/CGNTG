@@ -165,11 +165,13 @@ impl Executor {
             std::fs::create_dir_all(parent)?;
         }
         let mut temp_file = std::fs::File::create(&temp_path)?;
+        write!(temp_file, "#include <cstddef>\n")?;
         write!(
             temp_file,
             "{}",
             crate::deopt::utils::format_library_header_strings(deopt)
         )?;
+        
         write!(temp_file, "#include <iostream>\n")?;
         write!(temp_file, "#include <stdio.h>\n")?;
         write!(temp_file, "#include <fcntl.h>\n")?;
@@ -192,10 +194,18 @@ impl Executor {
         writeln!(temp_file, "    return 0;")?;
         writeln!(temp_file, "}}")?;
         drop(temp_file);
+        
         // check the program syntax and link correctness.
         if let Some(err) = self.is_program_syntax_correct(&temp_path)? {
             return Ok(Some(err));
         }
+        
+        // 特殊处理 cre2 库
+        let project_name = get_library_name();
+        if project_name == "cre2" {
+            return self.validate_cre2_program(&temp_path);
+        }
+        
         // if let Some(err) = self.is_program_link_correct(&temp_path)? {
         //     return Ok(Some(err));
         // }
@@ -215,7 +225,9 @@ impl Executor {
             "zlib" => "z", // zlib 实际上是 libz
             "ssl" => "ssl",
             "libpng" => "png",
+            "libaom"=>"aom",
             "crypto" => "crypto",
+            "cre2" => "re2",
             other => other,
         };
         let mut child = Command::new("clang++")
@@ -268,6 +280,79 @@ impl Executor {
                 return Ok(Some(ProgramError::Hang("Execution timed out".to_string())));
             }
         }
+        Ok(None)
+    }
+
+    /// 专门处理 cre2 库的验证逻辑
+    fn validate_cre2_program(&self, program_path: &Path) -> Result<Option<ProgramError>> {
+        log::debug!("Validating cre2 program: {}", program_path.display());
+        
+        let binary_out = program_path.with_extension("out");
+        let timeout = Duration::from_secs(15); // cre2 编译可能需要更长时间
+        
+        // 步骤1: 编译 cre2 程序
+        log::debug!("Step 1: Compiling cre2 program");
+        let cre2_include = "/opt/re2/2024-07-02/shared/include";
+        let cre2_lib = "/opt/re2/2024-07-02/shared/lib64";
+        let re2_lib = "/usr/local/lib";
+        
+        let mut compile_child = Command::new("g++")
+            .arg(program_path)
+            .arg("-o")
+            .arg(&binary_out)
+            .arg("-std=c++17")
+            .arg(format!("-I{}", cre2_include))
+            .arg(format!("-L{}", cre2_lib))
+            .arg("-lcre2")
+            .stderr(Stdio::piped())
+            .spawn()?;
+            
+        match compile_child.wait_timeout(timeout)? {
+            Some(status) => {
+                if !status.success() {
+                    let output = compile_child.wait_with_output()?;
+                    let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+                    log::error!("cre2 compilation failed: {}", err_msg);
+                    return Ok(Some(ProgramError::Link(format!("cre2 compilation failed: {}", err_msg))));
+                }
+            }
+            None => {
+                compile_child.kill()?;
+                compile_child.wait()?;
+                return Ok(Some(ProgramError::Hang("cre2 compilation timed out".to_string())));
+            }
+        }
+        
+        log::debug!("cre2 compilation successful");
+        
+        // 步骤2: 运行 cre2 程序
+        log::debug!("Step 2: Running cre2 program");
+        let mut exec_child = Command::new(&binary_out)
+            .env("LD_LIBRARY_PATH", format!("{}:{}:{}", cre2_lib, re2_lib, std::env::var("LD_LIBRARY_PATH").unwrap_or_default()))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+            
+        match exec_child.wait_timeout(timeout)? {
+            Some(status) => {
+                if !status.success() {
+                    let output = exec_child.wait_with_output()?;
+                    let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+                    let stdout_msg = String::from_utf8_lossy(&output.stdout).to_string();
+                    log::error!("cre2 execution failed: stderr={}, stdout={}", err_msg, stdout_msg);
+                    return Ok(Some(ProgramError::Execute(format!("cre2 execution failed: stderr={}, stdout={}", err_msg, stdout_msg))));
+                }
+                
+                log::debug!("cre2 execution successful with return code 0");
+            }
+            None => {
+                exec_child.kill()?;
+                exec_child.wait()?;
+                return Ok(Some(ProgramError::Hang("cre2 execution timed out".to_string())));
+            }
+        }
+        
+        log::debug!("cre2 validation completed successfully");
         Ok(None)
     }
 

@@ -19,6 +19,9 @@ use eyre::Result;
 use std::collections::HashSet;
 
 use std::io::Write;
+
+use std::time::{Duration, Instant};
+
 pub struct Fuzzer {
     pub deopt: Deopt,
     pub executor: Executor,
@@ -344,6 +347,14 @@ impl Fuzzer {
         let mut loop_cnt = 0;
         let mut has_checked = false;
 
+        let timeout: Option<Duration>;
+        if get_config().seed_gen_timeout.is_none() {
+            timeout = None
+        } else {
+            timeout = Some(Duration::from_secs(get_config().seed_gen_timeout.unwrap() * 60));
+        }
+        let start = Instant::now();
+
         // self.sync_from_previous_state(&mut logger)?;
 
         if get_config().generation_mode == config::GenerationModeP::FuzzDriver {
@@ -402,6 +413,10 @@ impl Fuzzer {
             //     .open("output111.txt")?;
             loop {
                 if self.is_converge() {
+                    break;
+                }
+                if timeout.is_some() && start.elapsed() > timeout.unwrap() {
+                    log::info!("Time out is reached. Stopping seed generation.");
                     break;
                 }
                 let programs =
