@@ -48,7 +48,7 @@ function build_absl() {
 
 function build_lib() {
     export INSTALLDIR=$WORK
-    mkdir -p $WORKw
+    mkdir -p $WORK
     LIB_STORE_DIR=$INSTALLDIR/lib
     rm $INSTALLDIR/lib
 
@@ -79,18 +79,34 @@ function build_lib() {
     cd $INSTALLDIR/lib
     ar -x libre2.a
     ar -x libcre2.a
-    mkdir -p absl_obj 
-    mv libabsl*.a absl_obj
+
+    # Collect and extract Abseil static libs. Avoid object filename collisions
+    # by extracting each archive into its own subdirectory.
+    mkdir -p absl_obj
+    # Move any installed Abseil archives from lib and lib64 into absl_obj
+    for libdir in "$INSTALLDIR/lib" "$INSTALLDIR/lib64"; do
+        if [ -d "$libdir" ]; then
+            for a in "$libdir"/libabsl*.a; do
+                [ -f "$a" ] || continue
+                mv "$a" absl_obj/
+            done
+        fi
+    done
+    # Extract each libabsl*.a into a unique folder to prevent overwrites
     pushd absl_obj
-    for FILE in $(ls libabsl*.a)
-    do
-        ar -x $FILE
+    shopt -s nullglob
+    for FILE in libabsl*.a; do
+        [ -f "$FILE" ] || continue
+        bn=${FILE%.a}
+        mkdir -p "$bn"
+        (cd "$bn" && ar -x "../$FILE")
     done
     popd
-    rm libcre2.a
-    ar -rcs libcre2.a *.o absl_obj/*.o
-    ${CXX:-g++} ${CXXFLAGS} -fPIC --shared -o libcre2.so *.o
-    rm *.o
+
+    rm -f libcre2.a
+    ar -rcs libcre2.a *.o absl_obj/*/*.o
+    ${CXX:-g++} ${CXXFLAGS} -fPIC --shared -o libcre2.so *.o absl_obj/*/*.o
+    rm -f *.o
     popd
 }
 
