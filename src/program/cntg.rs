@@ -143,7 +143,8 @@ impl CNTGProgram {
         crate::deopt::utils::create_dir_if_nonexist(&core_dir)?;
         // write the condensed core
         let core_path: PathBuf = [core_dir.clone(), "core.cc".into()].iter().collect();
-        std::fs::write(core_path, core_content)?;
+        let new_core_content=format!("#include <cstddef>\n{}",core_content);
+        std::fs::write(core_path, new_core_content)?;
 
         for (id, driver) in drivers.iter().enumerate() {
             // write each unit driver with new driver id.
