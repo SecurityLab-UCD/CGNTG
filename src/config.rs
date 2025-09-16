@@ -387,6 +387,7 @@ pub fn get_project_rules() -> String {
         1. Do not use CRE2_ANCHOR_UNANCHORED，use CRE2_UNANCHORED instead.
         2. Do not use CRE2_ANCHOR_NONE
         3.int cre2_full_match(const char * , const cre2_string_t * , cre2_string_t * , int ), Please note that cre2_full_match only have 4 parameters, not 5
+        4. Please note cre2_decl cre2_set *cre2_set_new(cre2_options_t *opt, cre2_anchor_t anchor) and no known conversion from 'int' to 'cre2_anchor_t' for 2nd argument
         ");
     }
     template

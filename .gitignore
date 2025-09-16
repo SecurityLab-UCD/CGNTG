@@ -24,4 +24,6 @@
 /data/libvpx/work
 .keypool
 /benchmark/
+/aom_build
+/aom
 .env
