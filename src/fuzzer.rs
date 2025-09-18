@@ -474,7 +474,11 @@ impl Fuzzer {
                         prompt.add_successful_example(example_program.statements.clone());
                     }
                 }
-                let has_new_in_round = !round_newly_discovered_pairs.is_empty();
+                let mut has_new_in_round=true;
+                if round_newly_discovered_pairs.capacity()<3{
+                    has_new_in_round=false;
+                }
+                
                 if has_new_in_round {
                     self.quiet_round = 0;
                     log::debug!(
@@ -494,7 +498,7 @@ impl Fuzzer {
                     self.quiet_round,
                     self.observer.discovered_api_pairs.read().unwrap().len()
                 );
-                if round_newly_discovered_pairs.len() < 1 && program_len != 0 {
+                if self.quiet_round ==3 && program_len != 0 {
                     break;
                 }
             }

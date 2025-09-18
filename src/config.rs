@@ -390,6 +390,20 @@ pub fn get_project_rules() -> String {
         4. Please note cre2_decl cre2_set *cre2_set_new(cre2_options_t *opt, cre2_anchor_t anchor) and no known conversion from 'int' to 'cre2_anchor_t' for 2nd argument
         ");
     }
+    if library_name=="zlib"{
+        template = template.replace("{project_rules}", "
+        1. Do not redefine z_stream_s
+        2. Note that #define zlib_version zlibVersion()
+        ");
+    }
+    if library_name == "libpng" {
+        template = template.replace("{project_rules}", "
+        1. add #include <zlib.h> at your code top.
+        2. Do not allocate png_info structures directly using malloc or sizeof. Instead, always create them with png_create_info_struct(png_structp) and destroy them with png_destroy_* functions provided by libpng.
+        3. When calling png_destroy_read_struct, always pass three arguments: &png_ptr, &info_ptr, and either a valid &end_info_ptr or a nullptr explicitly cast to png_infopp. Do not pass a plain NULL.
+        4. The PNG IHDR chunk must contain valid values: width and height must be greater than zero, bit depth must be one of {1, 2, 4, 8, 16}, and color type must be valid. Otherwise, libpng will issue warnings and abort with “Invalid IHDR data.”
+        ");
+    }
     template
 }
 pub fn get_sys_gen_template() -> &'static str {
