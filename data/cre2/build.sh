@@ -38,6 +38,24 @@ function download() {
 }
 
 function build_absl() {
+    # Save original environment variables and guarantee restore on exit
+    local _orig_CFLAGS="${CFLAGS-}"
+    local _orig_CXXFLAGS="${CXXFLAGS-}"
+    local _pushed=0
+    _restore() {
+      CFLAGS="$_orig_CFLAGS"
+      CXXFLAGS="$_orig_CXXFLAGS"
+      if (( _pushed )); then popd >/dev/null || true; fi
+    }
+    trap _restore RETURN
+
+    # Strip coverage flags
+    CFLAGS="${CFLAGS//-fprofile-instr-generate/}"
+    CFLAGS="${CFLAGS//-fcoverage-mapping/}"
+    CXXFLAGS="${CXXFLAGS//-fprofile-instr-generate/}"
+    CXXFLAGS="${CXXFLAGS//-fcoverage-mapping/}"
+
+    # Build abseil
     pushd $SRC/abseil-cpp
     #For ABSL, we must built it with the same flags passed to fuzzers. ABI mismatch: https://github.com/abseil/abseil-cpp/issues/1524
     rm -rf build

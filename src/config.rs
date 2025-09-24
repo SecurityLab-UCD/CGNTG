@@ -222,6 +222,14 @@ pub struct Config {
     /// Timeout in minutes for the seed generation phase
     #[arg(long)]
     pub seed_gen_timeout: Option<u64>,
+    /// Number of rounds over which the convergence condition is calculated for
+    /// ApiCombination mode
+    #[arg(long, default_value = "3")]
+    pub quiet_round: usize,
+    /// Minimum number of newly discovered pairs that indicate that the
+    /// generator has not converged in ApiCombination mode
+    #[arg(long, default_value = "3")]
+    pub num_new_pairs: usize,
 }
 
 impl Config {
@@ -241,6 +249,8 @@ impl Config {
             disable_power_schedule: false,
             handler_type: HandlerType::Openai,
             seed_gen_timeout: None,
+            quiet_round: 3,
+            num_new_pairs: 3,
         };
         let _ = CONFIG_INSTANCE.set(RwLock::new(config));
         crate::init_debug_logger().unwrap();
