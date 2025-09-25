@@ -80,7 +80,7 @@ fn should_deterministic_mutate(deopt: &Deopt) -> bool {
 pub struct Schedule {
     seeds: HashMap<String, Seed>,
     exponent: u32,
-    loop_count:u32
+    pub loop_count:u32
 }
 
 impl Default for Schedule {
