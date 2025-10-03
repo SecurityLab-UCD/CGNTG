@@ -13,6 +13,7 @@ use crate::{
     program::{libfuzzer::LibFuzzer, rand::rand_comb_len, serde::Deserializer, Program},
     request::{self, prompt::Prompt},
 };
+use clap::builder::Str;
 use tree_sitter::{Parser, TreeCursor};
 
 use eyre::Result;
@@ -292,12 +293,12 @@ impl Fuzzer {
         calls
     }
 
-    fn extract_2gram_pairs(calls: &[String]) -> Vec<(String, String)> {
+    fn extract_4gram_quads(calls: &[String]) -> Vec<(String, String,String,String)> {
         calls
-            .windows(2)
+            .windows(4)
             .filter_map(|w| {
-                if let [a, b] = &w {
-                    Some((a.clone(), b.clone()))
+                if let [a, b,c,d] = &w {
+                    Some((a.clone(), b.clone(), c.clone(),d.clone()))
                 } else {
                     None
                 }
@@ -439,13 +440,13 @@ impl Fuzzer {
                 );
                 //  下面都是跑的
                 let is_stuck = self.is_stuck(programs.len());
-                let mut round_newly_discovered_pairs: HashSet<(String, String)> = HashSet::new();
+                let mut round_newly_discovered_pairs: HashSet<(String, String,String,String)> = HashSet::new();
                 let mut successful_programs_this_round: Vec<Program> = Vec::new();
                 for program in programs {
                     self.deopt.save_succ_program(&program)?;
                     let cpp_code = &program.statements;
                     let calls = Self::extract_function_calls(cpp_code);
-                    let pairs = Self::extract_2gram_pairs(&calls);
+                    let pairs = Self::extract_4gram_quads(&calls);
 
                     // 保存API pairs到新文件
                     let pairs_dir = self.deopt.get_library_succ_seed_dir()?.join("pairs");
@@ -455,12 +456,12 @@ impl Fuzzer {
                     let pairs_path = pairs_dir.join(format!("{}.pairs", program.id));
                     let mut pairs_file = std::fs::File::create(pairs_path)?;
                     for pair in &pairs {
-                        writeln!(pairs_file, "(\"{}\", \"{}\")", pair.0, pair.1)?;
+                        writeln!(pairs_file, "(\"{}\", \"{}\", \"{}\", \"{}\")", pair.0, pair.1,pair.2,pair.3)?;
                     }
 
                     successful_programs_this_round.push(program.clone());
                     let mut discovered_pairs_guard =
-                        self.observer.discovered_api_pairs.write().unwrap();
+                        self.observer.discovered_api_quads.write().unwrap();
                     for pair in pairs {
                         // log::debug!("Discovered API pair: {:?}", pair);
                         if discovered_pairs_guard.insert(pair.clone()) {
@@ -500,7 +501,7 @@ impl Fuzzer {
                 log::info!(
                     "[Mutate Loop]: loop: {loop_cnt}, quiet_round: {}, discovered_api_pairs: {}",
                     self.quiet_round,
-                    self.observer.discovered_api_pairs.read().unwrap().len()
+                    self.observer.discovered_api_quads.read().unwrap().len()
                 );
                 if self.quiet_round ==3 && program_len != 0 {
                     break;

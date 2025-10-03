@@ -23,7 +23,7 @@ use std::sync::{Arc, RwLock};
 
 pub struct Observer {
     pub adg: ADG,
-    pub discovered_api_pairs: Arc<RwLock<HashSet<(String, String)>>>,
+    pub discovered_api_quads: Arc<RwLock<HashSet<(String, String,String,String)>>>,
     deopt: Deopt,
     branches: GlobalBranches,
     api_coverage: HashMap<String, f32>,
@@ -36,15 +36,15 @@ impl Observer {
             deopt: deopt.clone(),
             branches: GlobalBranches::new(),
             api_coverage: HashMap::new(),
-            discovered_api_pairs: Arc::new(RwLock::new(HashSet::new())),
+            discovered_api_quads: Arc::new(RwLock::new(HashSet::new())),
         }
     }
-    pub fn has_new_api_pairs(&self, pairs: &[(String, String)]) -> bool {
+    pub fn has_new_api_quads(&self, pairs: &[(String, String,String,String)]) -> bool {
         if pairs.is_empty() {
             return false;
         }
         let mut has_new = false;
-        let mut discovered_pair = self.discovered_api_pairs.write().unwrap();
+        let mut discovered_pair = self.discovered_api_quads.write().unwrap();
         for pair in pairs {
             if discovered_pair.insert(pair.clone()) {
                 has_new = true;
@@ -53,11 +53,11 @@ impl Observer {
         has_new
     }
 
-    pub fn merge_api_pairs(&self, pairs: &HashSet<(String, String)>) {
+    pub fn merge_api_pairs(&self, pairs: &HashSet<(String, String,String,String)>) {
         if pairs.is_empty() {
             return;
         }
-        let mut discovered_pair = self.discovered_api_pairs.write().unwrap();
+        let mut discovered_pair = self.discovered_api_quads.write().unwrap();
         for pair in pairs {
             discovered_pair.insert(pair.clone());
         }
