@@ -350,7 +350,7 @@ Code Quality Rules:
 - Ensure that data flows meaningfully between API calls (no dummy or unused variables).
 - Do not use placeholders like `// your code here`.
 - No comments needed — just clean and understandable code.
-
+- If you have to write any helper functions, begin them with static
 Output Instructions:
 
 Only output the function body `int test_{project}_api_sequence() { ... }`  
@@ -394,6 +394,7 @@ pub fn get_project_rules() -> String {
         template = template.replace("{project_rules}", "
         1. Do not redefine z_stream_s
         2. Note that #define zlib_version zlibVersion()
+        3. If you want to use Z_DEFAULT_WBITS,use MAX_WBITS instead
         ");
     }
     if library_name == "libpng" {
