@@ -16,7 +16,7 @@ function download() {
         coscli cp cos://sbd-testing-1251316161/bench_archive/LLM_FUZZ/archives/${PROJECT_NAME}.tar.gz ${PROJECT_NAME}.tar.gz
         tar -xvf ${PROJECT_NAME}.tar.gz && rm ${PROJECT_NAME}.tar.gz
     else
-        git clone --depth 1 -b develop https://github.com/madler/zlib.git
+        git clone --depth 1 -b v1.3.1 https://github.com/madler/zlib.git
         pushd zlib
 
         wget https://raw.githubusercontent.com/google/oss-fuzz/master/projects/zlib/checksum_fuzzer.c
