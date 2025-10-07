@@ -48,7 +48,7 @@ pushd "${SRC_DIR}"
 
 # Clone cre2 only (we use system RE2/Abseil via libre2-dev and libabsl-dev)
 if [ ! -d cre2 ]; then
-  git clone --depth 1 https://github.com/PromptFuzz/cre2
+  git clone --depth 1 --revision=4d7b7c2f97fdd0d22199f0514ec4c4cdfa91de4a https://github.com/PromptFuzz/cre2
 fi
 
 # Build cre2 via autotools

@@ -31,9 +31,12 @@ function download() {
         tar -xvf abseil-cpp.tar.gz && rm abseil-cpp.tar.gz
     else
         mkdir ${PROJECT_NAME}
-        git clone --depth 1 https://github.com/PromptFuzz/cre2
-        git clone --depth 1 https://github.com/google/re2.git
-        git clone --depth=1 https://github.com/abseil/abseil-cpp
+        git clone https://github.com/PromptFuzz/cre2
+        pushd cre2
+        git checkout 4d7b7c2f97fdd0d22199f0514ec4c4cdfa91de4a
+        popd
+        git clone --depth 1 --branch 2025-08-12 https://github.com/google/re2.git
+        git clone --depth=1 --branch 20250814.1 https://github.com/abseil/abseil-cpp
     fi
 }
 
