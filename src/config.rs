@@ -222,6 +222,9 @@ pub struct Config {
     /// Timeout in minutes for the seed generation phase
     #[arg(long)]
     pub seed_gen_timeout: Option<u64>,
+    /// Enable Chain of Thought (CoT) mode for API combination generation. In CoT mode, LLM first generates an execution plan in natural language, then generates code based on that plan. This can improve correctness for complex libraries.
+    #[arg(long = "cot", default_value = "false")]
+    pub enable_cot: bool,
 }
 
 impl Config {
@@ -241,6 +244,7 @@ impl Config {
             disable_power_schedule: false,
             handler_type: HandlerType::Openai,
             seed_gen_timeout: None,
+            enable_cot: false,
         };
         let _ = CONFIG_INSTANCE.set(RwLock::new(config));
         crate::init_debug_logger().unwrap();
@@ -318,10 +322,12 @@ Here are the custom types declared in {project}. Ensure that the variables you u
 ";
 pub const ERROR_REPAIR_TEMPLATE: &str =
     "The previous attempt to generate code failed with the following error:
+
 Error code:{error_code}
 Error Type: {error_type}
 Error Details:{error_details}
 Please regenerate a new program to repair the error without changing the logic, do not redefine main function and any other parameters even if the error is not defined, and do not change the function name.
+If error type is execution error without error details, you can regard it as Segmentation fault (core dumped)
 ";
 
 pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically correct C++ function named `int test_{project}_api_sequence()` using the {project} library.
@@ -337,8 +343,7 @@ Function Requirements:
 4. Do not use `std::memset`; use plain `memset`.  do not create new functions, use the existing APIs.
 5. The function must end with:
    API sequence test completed successfully
-6. When you enter a new phase, use `// step ...` to indicate the phase. different operations are in different steps, limit steps to 6
-7. In the generated API sequence, you **must include at least one edge-case scenario** (e.g., empty input buffer, invalid dictionary, zero-length output). Try to construct the sequence to test library robustness under minimal or malformed inputs.
+6. When you enter a new phase, use `// step ...` to indicate the phase. different operations are in different steps, steps cannot exceed 6
 
 Below is project's specific rules:
 {project_rules}
@@ -350,7 +355,7 @@ Code Quality Rules:
 - Ensure that data flows meaningfully between API calls (no dummy or unused variables).
 - Do not use placeholders like `// your code here`.
 - No comments needed — just clean and understandable code.
-
+- If you have to write any helper functions, begin them with static
 Output Instructions:
 
 Only output the function body `int test_{project}_api_sequence() { ... }`  
@@ -379,9 +384,67 @@ pub const USER_GEN_TEMPLATE: &str = "Create a C language program step by step by
 6. Once you just need a string of file name, directly using \"input_file\" or \"output_file\" as the file name.
 7. Release all allocated resources before return.
 ";
+
+/// Chain of Thought - Phase 1: Generate execution plan in natural language
+pub const USER_API_COT_PLAN_TEMPLATE: &str = "
+
+Use the following APIs in your plan:
+{combinations}
+
+**IMPORTANT: Do NOT write code in this step. Only write a detailed natural language execution plan.**
+
+Please create a detailed execution plan (in natural language, not code) for generating a C function `int test_{project}_api_sequence()` that uses the above APIs.
+
+Your execution plan should:
+1. Include the complete API declarations for the main APIs listed above
+2. If auxiliary/helper APIs are needed (for setup/cleanup), you may list them but don't need to include their full declarations
+3. Describe step-by-step how to use these APIs following the pattern: Initialize → Configure → Operate → Validate → Cleanup
+4. Explain the logic and data flow between API calls
+5. Be detailed enough that code can be generated from it in the next phase
+
+Requirements for the final code (describe how to meet these in your plan):
+- Function must return 66 on success
+- No if branches or loops; straight-line sequence of API calls only
+- Must not redefine or include the {project} library
+- Do not use std::memset; use plain memset
+- Do not create new functions, use existing APIs
+- Function must end with: API sequence test completed successfully
+- Divide into steps (no more than 5 steps)
+
+Output format:
+Write a natural language description explaining:
+- What variables need to be declared
+- What each step should do
+- How data flows between API calls
+- What cleanup is needed
+
+**Do NOT write actual C/C++ code. Only write the execution plan in natural language.**
+
+";
+
+/// Chain of Thought - Phase 2: Generate code based on the execution plan
+pub const USER_API_COT_CODE_TEMPLATE: &str = "
+Based on the following execution plan, write a complete, logically correct C++ function named `int test_{project}_api_sequence()`.
+Do not include if branches or loops; the function should be a straight-line sequence of API calls. Return 66 on success.
+Execution Plan:
+{execution_plan}
+
+Below is project's specific rules:
+{project_rules}
+
+Here are some successful examples for reference:
+{successful_examples}
+
+Again do not include if branches or loops; the function should be a straight-line sequence of API calls.
+";
+
 pub fn get_project_rules() -> String {
     let library_name = get_library_name();
-    let mut template = USER_API_TEMPLATE.to_string();
+    
+    let mut template =match get_config().enable_cot {
+        true => USER_API_COT_CODE_TEMPLATE.to_string(),
+        false => USER_API_TEMPLATE.to_string(),      
+    }; 
     if library_name == "cre2" {
         template = template.replace("{project_rules}", "
         1. Do not use CRE2_ANCHOR_UNANCHORED，use CRE2_UNANCHORED instead.
@@ -394,14 +457,43 @@ pub fn get_project_rules() -> String {
         template = template.replace("{project_rules}", "
         1. Do not redefine z_stream_s
         2. Note that #define zlib_version zlibVersion()
+        3. If you want to use Z_DEFAULT_WBITS,use MAX_WBITS instead
         ");
     }
-    if library_name == "libpng" {
+    if library_name=="lcms"{
         template = template.replace("{project_rules}", "
-        1. add #include <zlib.h> at your code top.
-        2. Do not allocate png_info structures directly using malloc or sizeof. Instead, always create them with png_create_info_struct(png_structp) and destroy them with png_destroy_* functions provided by libpng.
-        3. When calling png_destroy_read_struct, always pass three arguments: &png_ptr, &info_ptr, and either a valid &end_info_ptr or a nullptr explicitly cast to png_infopp. Do not pass a plain NULL.
-        4. The PNG IHDR chunk must contain valid values: width and height must be greater than zero, bit depth must be one of {1, 2, 4, 8, 16}, and color type must be valid. Otherwise, libpng will issue warnings and abort with “Invalid IHDR data.”
+        1. Never assign handles (cmsHANDLE, cmsMLU*, cmsToneCurve*, etc.) to integer or malloc() values. Always use official creation APIs (e.g., cmsCIECAM02Init, cmsMLUalloc).
+        2. When create cmsViewingConditions, the parameter is cmsCIEXYZ* whitePoint, cmsUInt32Number  surround, not cmsCIEXYZ whitePoint
+        ");
+    }
+    template
+}
+pub const raw_rule: &str = "
+{project_rules}
+";
+pub fn get_raw_project_rules() -> String {
+    let library_name = get_library_name();
+    
+    let mut template =raw_rule.to_string();
+    if library_name == "cre2" {
+        template = template.replace("{project_rules}", "
+        1. Do not use CRE2_ANCHOR_UNANCHORED，use CRE2_UNANCHORED instead.
+        2. Do not use CRE2_ANCHOR_NONE
+        3.int cre2_full_match(const char * , const cre2_string_t * , cre2_string_t * , int ), Please note that cre2_full_match only have 4 parameters, not 5
+        4. Please note cre2_decl cre2_set *cre2_set_new(cre2_options_t *opt, cre2_anchor_t anchor) and no known conversion from 'int' to 'cre2_anchor_t' for 2nd argument
+        ");
+    }
+    if library_name=="zlib"{
+        template = template.replace("{project_rules}", "
+        1. Do not redefine z_stream_s
+        2. Note that #define zlib_version zlibVersion()
+        3. If you want to use Z_DEFAULT_WBITS,use MAX_WBITS instead
+        ");
+    }
+    if library_name=="lcms"{
+        template = template.replace("{project_rules}", "
+        1. Never assign handles (cmsHANDLE, cmsMLU*, cmsToneCurve*, etc.) to integer or malloc() values. Always use official creation APIs (e.g., cmsCIECAM02Init, cmsMLUalloc).
+        2. When create cmsViewingConditions, the parameter is cmsCIEXYZ* whitePoint, cmsUInt32Number  surround, not cmsCIEXYZ whitePoint
         ");
     }
     template
@@ -429,6 +521,25 @@ pub fn get_user_gen_template() -> &'static str {
         let template = user_template.to_string();
         template.replace("{project}", &config.target)
     })
+}
+
+/// Get Chain of Thought plan template (Phase 1)
+pub fn get_user_cot_plan_template() -> String {
+    let config = get_config();
+    USER_API_COT_PLAN_TEMPLATE
+        .replace("{project}", &config.target)
+}
+
+/// Get Chain of Thought code template (Phase 2)
+pub fn get_user_cot_code_template() -> String {
+    let config = get_config();
+    USER_API_COT_CODE_TEMPLATE
+        .replace("{project}", &config.target)
+}
+
+/// Check if CoT mode is enabled
+pub fn is_cot_enabled() -> bool {
+    get_config().enable_cot
 }
 
 pub fn get_user_chat_template() -> String {
