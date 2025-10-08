@@ -419,6 +419,33 @@ impl Fuzzer {
                     log::info!("Time out is reached. Stopping seed generation.");
                     break;
                 }
+                let mut first_prompt=String::from("Hello");
+                if get_config().enable_cot{
+                    log::info!("Current prompt is in CoT mode.");
+                    // 生成执行计划
+                    prompt.set_cot_plan_task();
+                    match self.handler.generate(&prompt) {
+                        Ok(plan_programs) => {
+                            if let Some(plan_program) = plan_programs.first() {
+                                first_prompt = plan_program.statements.clone();
+                                log::info!("Execution plan generated successfully");
+                                log::debug!("Plan:\n{}", first_prompt);
+                            } else {
+                                log::warn!("No plan generated, falling back");
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("CoT Phase 1 error: {}, falling back", e);
+                        }
+                    }
+                }
+
+                Prompt::set_generate_task(&mut prompt);
+                if get_config().enable_cot{
+                    prompt.set_cot_code_task(first_prompt);
+                    log::info!("Current prompt is in CoT code generation mode.");
+                }
+                
                 let programs =
                     self.generate_and_validate_api_sequences(&mut prompt, &mut logger)?;
                 self.schedule.increment_loop();
