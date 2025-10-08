@@ -190,8 +190,8 @@ pub struct Config {
     /// Sample N outputs per LLM's request, max: 128
     #[arg(short, long, default_value = "10")]
     pub n_sample: u8,
-    /// Sampling temperature. Higher values means the model will take more risks. Try 0.9 for more creative applications, and 0 (argmax sampling) for ones with a well-defined answer.
-    #[arg(short, long, default_value = "0.9")]
+    /// Sampling temperature. Higher values means the model will take more risks. Try 1 for more creative applications, and 0 (argmax sampling) for ones with a well-defined answer.
+    #[arg(short, long, default_value = "1")]
     pub temperature: f32,
     /// whether use the power schedule to mutate prompt. true for purly random mutation of prompt.
     #[arg(short, long, default_value = "false")]
