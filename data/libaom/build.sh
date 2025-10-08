@@ -17,7 +17,7 @@ function download() {
         coscli cp cos://sbd-testing-1251316161/bench_archive/LLM_FUZZ/archives/aom.tar.gz aom.tar.gz
         tar -xvf aom.tar.gz && rm aom.tar.gz
     else
-        git clone --depth 1 https://aomedia.googlesource.com/aom
+        git clone --depth 1 -b v3.13.1 https://aomedia.googlesource.com/aom
     fi
     mv aom ${PROJECT_NAME}
 }
