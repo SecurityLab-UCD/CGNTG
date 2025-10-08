@@ -14,7 +14,7 @@ function download() {
         coscli cp cos://sbd-testing-1251316161/bench_archive/LLM_FUZZ/archives/cJSON.tar.gz cJSON.tar.gz
         tar -xvf cJSON.tar.gz && rm cJSON.tar.gz
     else
-        git clone --depth 1 https://github.com/DaveGamble/cJSON.git
+        git clone --depth 1 -b v1.7.19 https://github.com/DaveGamble/cJSON.git
     fi
     mv cJSON $PROJECT_NAME
 }
