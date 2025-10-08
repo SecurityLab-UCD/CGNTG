@@ -80,6 +80,7 @@ fn should_deterministic_mutate(deopt: &Deopt) -> bool {
 pub struct Schedule {
     seeds: HashMap<String, Seed>,
     exponent: u32,
+    pub loop_count:u32
 }
 
 impl Default for Schedule {
@@ -93,7 +94,11 @@ impl Schedule {
         Self {
             seeds: HashMap::new(),
             exponent: 1,
+            loop_count: 0,
         }
+    }
+    pub fn increment_loop(&mut self) {
+        self.loop_count += 1;
     }
     pub fn get_seed_by_name(&self, name: &str) -> Option<&Seed> {
         self.seeds.get(name)
@@ -218,7 +223,26 @@ impl Schedule {
         let values: Vec<&Seed> = self.seeds.values().collect();
         let energies: Vec<f32> = values.iter().map(|x| x.energy).collect();
         let choose = weighted_choose(energies);
-        let choose_seed = values[choose];
+        let mut choose_seed = values[choose];
+        
+  
+        let max_prob = 0.3_f32;
+        let steepness = 0.1_f32; 
+        let midpoint = 50.0_f32; 
+        
+        let replace_with_lowest_prob = max_prob / (1.0 + E.powf(steepness * (self.loop_count as f32 - midpoint)));
+        
+        if prob_coin(replace_with_lowest_prob) {
+            let mut min_energy = f32::MAX;
+            for seed in &values {
+                if seed.energy < min_energy {
+                    min_energy = seed.energy;
+                    choose_seed = seed;
+                }
+            }
+            log::info!("Loop {}: Replaced with lowest energy API: {} (energy: {}), prob: {:.4}", 
+                    self.loop_count, choose_seed.name, choose_seed.energy, replace_with_lowest_prob);
+        }
         &choose_seed.name
     }
 

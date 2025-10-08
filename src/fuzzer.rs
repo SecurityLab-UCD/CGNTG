@@ -421,7 +421,11 @@ impl Fuzzer {
                 }
                 let programs =
                     self.generate_and_validate_api_sequences(&mut prompt, &mut logger)?;
-
+                self.schedule.increment_loop();
+                println!(
+                    "Current loop count: {}",
+                    self.schedule.loop_count
+                );
                 if programs.is_empty() {
                     log::debug!("No programs generated successfully, continue to next round.");
                     self.schedule.update_prompt_for_api_mode(&mut prompt)?;
