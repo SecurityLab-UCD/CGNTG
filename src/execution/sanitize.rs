@@ -1,3 +1,4 @@
+        
 use self::utils::cleanup_sanitize_dir;
 use super::{
     ast::remove_duplicate_definition,
@@ -228,6 +229,7 @@ impl Executor {
             "libaom"=>"aom",
             "crypto" => "crypto",
             "cre2" => "re2",
+            "lcms"=> "lcms2",
             other => other,
         };
         let mut child = Command::new("clang++")

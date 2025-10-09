@@ -140,16 +140,19 @@ impl Schedule {
             serde_json::to_string(&energies_str).unwrap()
         );
     }
-    pub fn update_energies_from_api_pairs(&mut self, api_pairs: &HashSet<(String, String)>) {
+    pub fn update_energies_from_api_pairs(&mut self, api_pairs: &HashSet<(String, String,String)>) {
         if api_pairs.is_empty() {
             log::warn!("No API pairs found to update energies.");
             return;
         }
-        for (api1, api2) in api_pairs {
+        for (api1, api2,api3) in api_pairs {
             if let Some(seed) = self.seeds.get_mut(api1) {
                 seed.energy += 1.0;
             }
             if let Some(seed) = self.seeds.get_mut(api2) {
+                seed.energy += 1.0;
+            }
+            if let Some(seed) = self.seeds.get_mut(api3) {
                 seed.energy += 1.0;
             }
         }
@@ -229,7 +232,7 @@ impl Schedule {
         let max_prob = 0.3_f32;
         let steepness = 0.1_f32; 
         let midpoint = 50.0_f32; 
-        
+        println!("loop count: {}", self.loop_count);
         let replace_with_lowest_prob = max_prob / (1.0 + E.powf(steepness * (self.loop_count as f32 - midpoint)));
         
         if prob_coin(replace_with_lowest_prob) {
