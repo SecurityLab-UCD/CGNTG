@@ -31,13 +31,34 @@ function download() {
         tar -xvf abseil-cpp.tar.gz && rm abseil-cpp.tar.gz
     else
         mkdir ${PROJECT_NAME}
-        git clone --depth 1 https://github.com/PromptFuzz/cre2
-        git clone --depth 1 https://github.com/google/re2.git
-        git clone --depth=1 https://github.com/abseil/abseil-cpp
+        git clone https://github.com/PromptFuzz/cre2
+        pushd cre2
+        git checkout 4d7b7c2f97fdd0d22199f0514ec4c4cdfa91de4a
+        popd
+        git clone --depth 1 --branch 2025-08-12 https://github.com/google/re2.git
+        git clone --depth=1 --branch 20250814.1 https://github.com/abseil/abseil-cpp
     fi
 }
 
 function build_absl() {
+    # Save original environment variables and guarantee restore on exit
+    local _orig_CFLAGS="${CFLAGS-}"
+    local _orig_CXXFLAGS="${CXXFLAGS-}"
+    local _pushed=0
+    _restore() {
+      CFLAGS="$_orig_CFLAGS"
+      CXXFLAGS="$_orig_CXXFLAGS"
+      if (( _pushed )); then popd >/dev/null || true; fi
+    }
+    trap _restore RETURN
+
+    # Strip coverage flags
+    CFLAGS="${CFLAGS//-fprofile-instr-generate/}"
+    CFLAGS="${CFLAGS//-fcoverage-mapping/}"
+    CXXFLAGS="${CXXFLAGS//-fprofile-instr-generate/}"
+    CXXFLAGS="${CXXFLAGS//-fcoverage-mapping/}"
+
+    # Build abseil
     pushd $SRC/abseil-cpp
     #For ABSL, we must built it with the same flags passed to fuzzers. ABI mismatch: https://github.com/abseil/abseil-cpp/issues/1524
     rm -rf build

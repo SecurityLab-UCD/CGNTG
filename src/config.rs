@@ -190,8 +190,8 @@ pub struct Config {
     /// Sample N outputs per LLM's request, max: 128
     #[arg(short, long, default_value = "10")]
     pub n_sample: u8,
-    /// Sampling temperature. Higher values means the model will take more risks. Try 0.9 for more creative applications, and 0 (argmax sampling) for ones with a well-defined answer.
-    #[arg(short, long, default_value = "0.9")]
+    /// Sampling temperature. Higher values means the model will take more risks. Try 1 for more creative applications, and 0 (argmax sampling) for ones with a well-defined answer.
+    #[arg(short, long, default_value = "1")]
     pub temperature: f32,
     /// whether use the power schedule to mutate prompt. true for purly random mutation of prompt.
     #[arg(short, long, default_value = "false")]
@@ -222,6 +222,14 @@ pub struct Config {
     /// Timeout in minutes for the seed generation phase
     #[arg(long)]
     pub seed_gen_timeout: Option<u64>,
+    /// Number of rounds over which the convergence condition is calculated for
+    /// ApiCombination mode
+    #[arg(long, default_value = "3")]
+    pub quiet_round: usize,
+    /// Minimum number of newly discovered pairs that indicate that the
+    /// generator has not converged in ApiCombination mode
+    #[arg(long, default_value = "3")]
+    pub num_new_pairs: usize,
     /// Enable Chain of Thought (CoT) mode for API combination generation. In CoT mode, LLM first generates an execution plan in natural language, then generates code based on that plan. This can improve correctness for complex libraries.
     #[arg(long = "cot", default_value = "false")]
     pub enable_cot: bool,
@@ -244,6 +252,8 @@ impl Config {
             disable_power_schedule: false,
             handler_type: HandlerType::Openai,
             seed_gen_timeout: None,
+            quiet_round: 3,
+            num_new_pairs: 3,
             enable_cot: false,
         };
         let _ = CONFIG_INSTANCE.set(RwLock::new(config));
