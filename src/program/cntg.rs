@@ -17,12 +17,12 @@ impl CNTGProgram {
     pub fn new(
         programs: Vec<PathBuf>,
         batch_size: usize,
-        deopt: Deopt,
+        deopt: &Deopt,
     ) -> Self {
         Self {
             programs,
             batch: batch_size,
-            deopt,
+            deopt: deopt.clone(),
         }
     }
 
