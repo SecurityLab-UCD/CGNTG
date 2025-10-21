@@ -1,6 +1,8 @@
 /// Logs metadata of seeds
 use crate::cntg_program::CNTGProgram;
 use crate::deopt::Deopt;
+use crate::execution::Executor;
+use crate::feedback::clang_coverage::CodeCoverage;
 use csv::Writer;
 use eyre::{Result, eyre, Error};
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
@@ -44,7 +46,7 @@ struct SeedMeta {
     #[serde(serialize_with = "duration_as_seconds")]
     #[serde(deserialize_with = "seconds_as_duration")]
     duration_since_start: Duration,
-    cumulative_branch_coverage: Option<f32>,
+    pub cumulative_branch_coverage: Option<f32>,
 }
 
 impl SeedMetas {
@@ -87,7 +89,10 @@ impl SeedMetas {
 
         // Iterate over each seed_meta sequentially for future modification
         let workspace_dir = deopt.get_library_work_dir()?.join("coverage");
-        for mut seed_meta in &mut self.seed_metas {
+        fs::remove_dir_all(&workspace_dir)?;
+        let mut cumulative_profile_exists = false;
+        let cumulative_profile_path = workspace_dir.join("cumulative_profile.profdata");
+        for seed_meta in &mut self.seed_metas {
             let seed_path = seed_meta.seed_path.clone();
             let mut program = CNTGProgram::new(vec![seed_path.clone()], 1, deopt);
             let stem = seed_path.file_stem().ok_or_else(|| eyre!("Invalid seed path"))?;
@@ -101,6 +106,25 @@ impl SeedMetas {
             program.chdir(&seed_dir)?;
             program.synthesis(&seed_dir)?;
             program.compile(&seed_dir)?;
+
+            let executor = Executor::new(&deopt)?;
+            executor.collect_cntg_cov_all_cores(&seed_dir)?;
+            let seed_profdata_path: PathBuf = seed_dir.join("default.profdata");
+            if !cumulative_profile_exists {
+            }
+
+            let coverage: CodeCoverage;
+            if cumulative_profile_exists {
+                Executor::merge_profdata(&vec![cumulative_profile_path.clone(), seed_profdata_path.clone()], &cumulative_profile_path)?;
+                coverage = executor.obtain_cov_summary_from_profdata(&cumulative_profile_path)?;
+            } else {
+                coverage = executor.obtain_cov_summary_from_profdata(&seed_profdata_path)?;
+                fs::copy(&seed_profdata_path, &cumulative_profile_path)?;
+                cumulative_profile_exists = true;
+            }
+            let coverage_summary = coverage.get_total_summary();
+            seed_meta.cumulative_branch_coverage = Some(coverage_summary.get_percent_branch_covered());
+            dbg!(&coverage_summary);
         }
 
         todo!();

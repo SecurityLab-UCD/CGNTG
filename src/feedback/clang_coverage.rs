@@ -105,6 +105,10 @@ impl CovSummary {
         self.branches.count
     }
 
+    pub fn get_percent_branch_covered(&self) -> f32 {
+        self.branches.percent
+    }
+
     pub fn count_covered_functions(&self) -> usize {
         self.functions.covered
     }
@@ -409,7 +413,7 @@ impl Executor {
         Ok(cov)
     }
 
-    pub fn obtain_cov_summary_from_prodata(&self, profdata: &Path) -> Result<CodeCoverage> {
+    pub fn obtain_cov_summary_from_profdata(&self, profdata: &Path) -> Result<CodeCoverage> {
         // library so linked with code coverage instrumentation.
         let cov_lib = crate::deopt::utils::get_cov_lib_path(&self.deopt, true);
         // view coverage report
@@ -807,7 +811,7 @@ mod tests {
         .iter()
         .collect();
         let executor = Executor::new(&deopt)?;
-        let cov = executor.obtain_cov_summary_from_prodata(&profdata)?;
+        let cov = executor.obtain_cov_summary_from_profdata(&profdata)?;
         let summary = cov.get_total_summary();
         assert_eq!(summary.count_covered_branches(), 185);
         assert_eq!(summary.count_covered_functions(), 13);
