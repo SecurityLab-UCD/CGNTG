@@ -4,6 +4,8 @@
 /// CNTG programs generated via ApiCombination mode differs from fuzzers in that
 /// CNTG programs require a main method.
 
+pub mod seed_metas;
+
 use crate::deopt::Deopt;
 use std::path::{Path, PathBuf};
 use eyre::{Context, Result, eyre};
