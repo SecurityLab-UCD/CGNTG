@@ -72,14 +72,12 @@ impl CNTGProgram {
         let mut batch = Vec::new();
         let mut batch_id = Vec::new();
         let mut core_id = 0;
-        dbg!("Start");
 
         for (i, driver) in self.programs.clone().iter().enumerate() {
             batch.push(driver.clone());
             batch_id.push(i);
             if batch.len() == self.batch || i == self.programs.len() - 1 {
                 let core_content = self.synthesis_batch(&batch_id)?;
-                dbg!("Core content obtained");
                 self.fuse_core(outdir, core_content, core_id, &batch, &batch_id)?;
                 batch.clear();
                 batch_id.clear();
@@ -135,7 +133,6 @@ impl CNTGProgram {
         // write the condensed core
         let core_path: PathBuf = [core_dir.clone(), "core.cc".into()].iter().collect();
         let new_core_content=format!("#include <cstddef>\n{}",core_content);
-        dbg!(&core_path);
         std::fs::write(core_path, new_core_content)?;
 
         for (id, driver) in drivers.iter().enumerate() {

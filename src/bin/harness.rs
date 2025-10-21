@@ -54,7 +54,6 @@ fn fuse_seeds(
         deopt.get_library_seed_dir()?
     };
     let programs = crate::deopt::utils::read_sort_dir(&test_dir)?;
-    dbg!(&programs);
 
     let batch_size = batch_size.unwrap_or(100);
 
@@ -125,8 +124,10 @@ fn record_coverage(project: String) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let seed_meta_path: &Path = &deopt.get_seed_meta_path()?;
     let mut seed_metas = SeedMetas::try_from(seed_meta_path)?;
+    log::info!("Calculating coverage for {} seeds", seed_metas.len());
     seed_metas.update_cov(&deopt)?;
-    seed_metas.write_to(seed_meta_path)?;
+    log::info!("Writing result to {}", &seed_meta_path.to_str().unwrap_or("unknown"));
+    seed_metas.write_to(&seed_meta_path)?;
     Ok(())
 }
 

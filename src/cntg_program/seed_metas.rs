@@ -72,6 +72,10 @@ impl SeedMetas {
         Ok(())
     }
 
+    pub fn len(&self) -> usize {
+        self.seed_metas.len()
+    }
+
     /// Write seed metadata to path
     pub fn write_to(&self, path: &Path) -> Result<()> {
         let mut writer =  Writer::from_path(path)?;
@@ -124,10 +128,11 @@ impl SeedMetas {
             }
             let coverage_summary = coverage.get_total_summary();
             seed_meta.cumulative_branch_coverage = Some(coverage_summary.get_percent_branch_covered());
-            dbg!(&coverage_summary);
-        }
 
-        todo!();
+            let seed_path_str = seed_path.to_str().unwrap_or("unknown");
+            log::debug!("Cumulative coverage for {} is {}", seed_path_str, &seed_meta.cumulative_branch_coverage.unwrap());
+        }
+        Ok(())
     }
 }
 
