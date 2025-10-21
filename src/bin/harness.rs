@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use eyre::{Result, eyre};
+use eyre::{Result};
 use prompt_fuzz::deopt::{self, Deopt};
 use prompt_fuzz::execution::Executor;
 use prompt_fuzz::cntg_program::CNTGProgram;

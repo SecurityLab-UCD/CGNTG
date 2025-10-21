@@ -8,6 +8,7 @@ use std::option::Option;
 use std::path::{PathBuf, Path};
 use std::time::{Duration, Instant};
 use std::vec::Vec;
+use std::fs;
 
 
 /// Flattened duration serializer for csv
@@ -85,13 +86,24 @@ impl SeedMetas {
             .sort_by_key(|m| m.duration_since_start);
 
         // Iterate over each seed_meta sequentially for future modification
-        let work_dir = deopt.get_library_work_dir()?.join("coverage");
+        let workspace_dir = deopt.get_library_work_dir()?.join("coverage");
         for mut seed_meta in &mut self.seed_metas {
-            let mut program = CNTGProgram::new(vec![seed_meta.seed_path.clone()], 1, deopt);
+            let seed_path = seed_meta.seed_path.clone();
+            let mut program = CNTGProgram::new(vec![seed_path.clone()], 1, deopt);
+            let stem = seed_path.file_stem().ok_or_else(|| eyre!("Invalid seed path"))?;
+            let seed_dir = workspace_dir.join(stem);
+            match fs::remove_dir_all(&seed_dir) {
+                Ok(_) => (),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+                Err(e) => return Err(eyre!(e)),
+            }
+            fs::create_dir_all(&seed_dir)?;
+            program.chdir(&seed_dir)?;
+            program.synthesis(&seed_dir)?;
+            program.compile(&seed_dir)?;
         }
 
-        // TODO: Update cumulative_branch_coverage based on recorded coverage
-        Ok(())
+        todo!();
     }
 }
 
