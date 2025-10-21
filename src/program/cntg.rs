@@ -1,3 +1,9 @@
+/// This module contains CNTGProgram, used for coverage collection for
+/// specifically CNTG programs
+///
+/// CNTG programs generated via ApiCombination mode differs from fuzzers in that
+/// CNTG programs require a main method.
+
 use crate::deopt::Deopt;
 use std::path::{Path, PathBuf};
 use eyre::{Context, Result, eyre};
