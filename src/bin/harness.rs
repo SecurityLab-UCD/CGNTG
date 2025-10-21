@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use eyre::Result;
 use prompt_fuzz::deopt::{self, Deopt};
 use prompt_fuzz::execution::Executor;
-use prompt_fuzz::program::cntg::CNTGProgram;
+use prompt_fuzz::cntg_program::CNTGProgram;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
 use std::io::Write;
