@@ -56,9 +56,10 @@ fn fuse_seeds(
     let batch_size = batch_size.unwrap_or(100);
 
     let mut cntg_program = CNTGProgram::new(programs, batch_size, &deopt);
-    cntg_program.transform()?;
-    cntg_program.synthesis()?;
-    cntg_program.compile()?;
+    cntg_program.reset();
+    cntg_program.chdir(&deopt.get_library_driver_dir().unwrap())?;
+    cntg_program.synthesis(&deopt.get_library_cntg_dir().unwrap())?;
+    cntg_program.compile(&deopt.get_library_cntg_dir().unwrap())?;
     Ok(())
 }
 
