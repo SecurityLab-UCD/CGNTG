@@ -1,9 +1,10 @@
 use clap::{Parser, Subcommand};
-use eyre::Result;
+use eyre::{Result, eyre};
 use prompt_fuzz::deopt::{self, Deopt};
 use prompt_fuzz::execution::Executor;
 use prompt_fuzz::cntg_program::CNTGProgram;
-use std::path::PathBuf;
+use prompt_fuzz::cntg_program::seed_metas::SeedMetas;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::io::Write;
 
@@ -32,6 +33,8 @@ enum Commands {
     CollectCoverage,
     /// Report coverage for CNTG fused programs
     ReportCoverage,
+    /// Record coverage based on the seed meta file to the same file
+    RecordCoverage,
     /// Create seeds, fuse them, and report coverage. Pass fuzzer arguments after the command.
     All {
         #[clap(raw = true)]
@@ -56,7 +59,7 @@ fn fuse_seeds(
     let batch_size = batch_size.unwrap_or(100);
 
     let mut cntg_program = CNTGProgram::new(programs, batch_size, &deopt);
-    cntg_program.reset();
+    cntg_program.reset()?;
     cntg_program.chdir(&deopt.get_library_driver_dir().unwrap())?;
     cntg_program.synthesis(&deopt.get_library_cntg_dir().unwrap())?;
     cntg_program.compile(&deopt.get_library_cntg_dir().unwrap())?;
@@ -118,6 +121,14 @@ fn report_coverage(project: String) -> Result<()> {
     Ok(())
 }
 
+fn record_coverage(project: String) -> Result<()> {
+    let deopt = Deopt::new(project)?;
+    let seed_meta_path: &Path = &deopt.get_seed_meta_path()?;
+    let seed_metas = SeedMetas::try_from(seed_meta_path).map_err(|e| eyre!(e))?;
+    dbg!(seed_metas);
+    todo!();
+}
+
 fn create_seeds(project: &str, fuzzer_args: &[String]) -> Result<()> {
     let mut cmd = Command::new("cargo");
     cmd.arg("run")
@@ -169,6 +180,13 @@ fn main() -> ExitCode {
         Commands::ReportCoverage => {
             if let Err(err) = report_coverage(project) {
                 log::error!("Failed to report coverage: {}", err);
+                return ExitCode::FAILURE;
+            }
+            return ExitCode::SUCCESS;
+        }
+        Commands::RecordCoverage => {
+            if let Err(err) = record_coverage(project) {
+                log::error!("Failed to record coverage: {}", err);
                 return ExitCode::FAILURE;
             }
             return ExitCode::SUCCESS;
