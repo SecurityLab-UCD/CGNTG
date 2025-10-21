@@ -1,10 +1,13 @@
 /// Logs metadata of seeds
+use crate::cntg_program::CNTGProgram;
+use crate::deopt::Deopt;
+use csv::Writer;
+use eyre::{Result, eyre, Error};
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
+use std::option::Option;
 use std::path::{PathBuf, Path};
 use std::time::{Duration, Instant};
 use std::vec::Vec;
-use std::option::Option;
-use serde::{Serialize, Serializer, Deserialize, Deserializer};
-use csv::Writer;
 
 
 /// Flattened duration serializer for csv
@@ -36,11 +39,11 @@ pub struct SeedMetas {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SeedMeta {
-    seed_path: PathBuf,
+    pub seed_path: PathBuf,
     #[serde(serialize_with = "duration_as_seconds")]
     #[serde(deserialize_with = "seconds_as_duration")]
     duration_since_start: Duration,
-    branch_coverage: Option<f32>,
+    cumulative_branch_coverage: Option<f32>,
 }
 
 impl SeedMetas {
@@ -52,42 +55,57 @@ impl SeedMetas {
     }
 
     /// Add a generated seed's meta data
-    pub fn add(&mut self, seed_path: &Path, generation_time: Instant, branch_coverage: Option<f32>) -> Result<(), &str> {
+    pub fn add(&mut self, seed_path: &Path, generation_time: Instant, branch_coverage: Option<f32>) -> Result<()> {
         if self.start_time.is_none() {
-            return Err("To add new seeds with this method, SeedMetas must be initialized with a start time");
+            return Err(eyre!("To add new seeds with this method, SeedMetas must be initialized with a start time"));
         }
         self.seed_metas.push(
             SeedMeta{
                 seed_path: seed_path.to_path_buf(),
                 duration_since_start: generation_time - self.start_time.unwrap(),
-                branch_coverage,
+                cumulative_branch_coverage: branch_coverage,
             }
         );
         Ok(())
     }
 
     /// Write seed metadata to path
-    pub fn write_to(&self, path: &Path) -> Result<(), &str> {
-        let mut writer =  Writer::from_path(path).map_err(|e| "Failed to create writer at path")?;
+    pub fn write_to(&self, path: &Path) -> Result<()> {
+        let mut writer =  Writer::from_path(path)?;
         for seed_meta in &self.seed_metas {
-            writer.serialize(seed_meta).map_err(|e| "Failed to serialize seed")?;
+            writer.serialize(seed_meta)?;
         }
-        writer.flush().map_err(|e| "Failed to flush csv writer")?;
+        writer.flush()?;
+        Ok(())
+    }
+
+    pub fn update_cov(&mut self, deopt: &Deopt) -> Result<()> {
+        // Ensure seed metas are processed in chronological order
+        self.seed_metas
+            .sort_by_key(|m| m.duration_since_start);
+
+        // Iterate over each seed_meta sequentially for future modification
+        let work_dir = deopt.get_library_work_dir()?.join("coverage");
+        for mut seed_meta in &mut self.seed_metas {
+            let mut program = CNTGProgram::new(vec![seed_meta.seed_path.clone()], 1, deopt);
+        }
+
+        // TODO: Update cumulative_branch_coverage based on recorded coverage
         Ok(())
     }
 }
 
 
 impl TryFrom<&Path> for SeedMetas {
-    type Error = &'static str;
+    type Error = Error;
 
     /// Load seed_meta from csv
     fn try_from(path: &Path) -> Result<Self, Self::Error> {
-        let mut reader = csv::Reader::from_path(path).map_err(|_| "Path is invalid")?;
+        let mut reader = csv::Reader::from_path(path)?;
         let mut seed_metas = Vec::new();
 
         for result in reader.deserialize() {
-            let record: SeedMeta = result.map_err(|_| "Failed to deserialize file")?;
+            let record: SeedMeta = result?;
             seed_metas.push(record);
         }
 

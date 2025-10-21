@@ -124,9 +124,10 @@ fn report_coverage(project: String) -> Result<()> {
 fn record_coverage(project: String) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let seed_meta_path: &Path = &deopt.get_seed_meta_path()?;
-    let seed_metas = SeedMetas::try_from(seed_meta_path).map_err(|e| eyre!(e))?;
-    dbg!(seed_metas);
-    todo!();
+    let mut seed_metas = SeedMetas::try_from(seed_meta_path)?;
+    seed_metas.update_cov(&deopt)?;
+    seed_metas.write_to(seed_meta_path)?;
+    Ok(())
 }
 
 fn create_seeds(project: &str, fuzzer_args: &[String]) -> Result<()> {
