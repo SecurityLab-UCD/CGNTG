@@ -15,6 +15,12 @@ use std::{
 #[derive(Debug, Clone)]
 pub enum ProgramTask {
     Generate,
+    /// Chain of Thought Phase 1: Generate execution plan
+    CotPlan,
+    /// Chain of Thought Phase 2: Generate code from plan
+    CotCode {
+        execution_plan: String,
+    },
     Repair {
         failed_code: String,
         error: ProgramError,
@@ -29,12 +35,21 @@ pub struct Prompt {
 
 impl Prompt {
     pub fn new(gadgets: Vec<&'static FuncGadget>) -> Self {
+        // Check if CoT mode is enabled
+        let task = if config::is_cot_enabled() 
+            && config::get_config().generation_mode == config::GenerationModeP::ApiCombination {
+            ProgramTask::CotPlan
+        } else {
+            ProgramTask::Generate
+        };
+        
         Self {
             gadgets,
             successful_examples: VecDeque::new(),
-            task: ProgramTask::Generate,
+            task,
         }
     }
+    
     pub fn set_repair_task(&mut self, failed_code: String, error: ProgramError) {
         self.task = ProgramTask::Repair {
             failed_code: (failed_code),
@@ -44,6 +59,14 @@ impl Prompt {
 
     pub fn set_generate_task(&mut self) {
         self.task = ProgramTask::Generate;
+    }
+    
+    pub fn set_cot_plan_task(&mut self) {
+        self.task = ProgramTask::CotPlan;
+    }
+    
+    pub fn set_cot_code_task(&mut self, execution_plan: String) {
+        self.task = ProgramTask::CotCode { execution_plan };
     }
 }
 
@@ -190,6 +213,42 @@ impl Prompt {
                         .replace("{combinations}", &combination_to_str(&self.gadgets))
                         .replace("{successful_examples}", &successful_examples)
                 }
+                
+                ProgramTask::CotPlan => {
+                    log::debug!("CoT Phase 1: Generating execution plan");
+    
+                    config::get_user_cot_plan_template()
+                        .replace("{combinations}", &combination_to_str(&self.gadgets))
+                       
+                       
+                }
+                
+                ProgramTask::CotCode { execution_plan } => {
+                    log::debug!("CoT Phase 2: Generating code from plan");
+                    let successful_examples = if !self.successful_examples.is_empty() {
+                        let examples_code = self
+                            .successful_examples
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<String>>()
+                            .join("\n\n---\n\n");
+                        format!(
+                            "Here are some successful examples:\n```cpp\n{}\n```",
+                            examples_code
+                        )
+                    } else {
+                        String::new()
+                    };
+                    
+                    let project_rules = config::get_raw_project_rules();
+                    config::get_user_cot_code_template()
+                        .replace("{execution_plan}", execution_plan)
+                        .replace("{project_rules}", &project_rules)
+                        .replace("{successful_examples}", &successful_examples)
+                    
+                    
+                    
+                }
 
                 ProgramTask::Repair { failed_code, error } => {
                     let (error_type_str, error_details_str) = match error {
@@ -207,7 +266,7 @@ impl Prompt {
                         .replace("{error_details}", &error_details_str)
                 }
             };
-            log::debug!("user Prompt:{:?}", user_msg_content);
+            log::debug!("user Prompt:{:?}\n", user_msg_content);
             // let user_msg = config::get_user_gen_template()
             //     .replace("{combinations}", &combination_to_str(&self.gadgets))
             //     .replace("{successful_examples}", &successful_examples); // **注入样例**

@@ -617,6 +617,7 @@ impl HttpHandler {
         &self,
         messages: Vec<OpenAIMessage>,
         model: String,
+        strip_wrapper: bool,
     ) -> Result<(Program, TokenUsage)> {
         let request = HttpClient::build_openai_request(&model, messages, Some(0.7), None);
 
@@ -627,11 +628,21 @@ impl HttpHandler {
         }
 
         let content = &response.choices[0].message.content;
-        let stripped_content = self.strip_code_wrapper(content);
+
+        // 根据参数决定是否剥离代码包装器
+        let final_content = if strip_wrapper {
+            self.strip_code_wrapper(content)
+        } else {
+            content.to_string()
+        };
+        
         let usage = TokenUsage::from_openai_usage(&response.usage);
 
-        Ok((Program::new(&stripped_content), usage))
+        Ok((Program::new(&final_content), usage))
     }
+
+  
+
 
     /// 剥离代码包装器（复制自openai.rs）
     fn strip_code_wrapper(&self, input: &str) -> String {
@@ -683,13 +694,34 @@ impl super::Handler for HttpHandler {
         // 获取配置
         let config = crate::config::get_config();
         let model = crate::config::get_openai_model_name().clone();
-
+        let mut num=config.n_sample;
+        if config.enable_cot {
+            match &prompt.task {
+                crate::request::prompt::ProgramTask::CotPlan => {
+                    // CoT阶段1: 生成执行计划，只生成1个
+                    num = 1;
+                    log::debug!("CoT Phase 1: Generating single execution plan");
+                }
+                crate::request::prompt::ProgramTask::CotCode { .. } => {
+                    // CoT阶段2: 根据计划生成代码，并行生成多个
+                    num = config.n_sample;
+                    log::debug!("CoT Phase 2: Generating {} programs based on plan", num);
+                }
+                _ => {
+                    // 其他情况使用默认值
+                }
+            }
+        }
         // 创建异步任务，并行执行
         let mut futures = Vec::new();
-        for _ in 0..config.n_sample {
+        
+        // 判断是否为CoT Plan阶段（不需要strip）
+        let strip_wrapper = !matches!(&prompt.task, crate::request::prompt::ProgramTask::CotPlan);
+
+        for _ in 0..num {
             let messages_clone = messages.clone();
             let model_clone = model.clone();
-            let future = self.generate_single_program(messages_clone, model_clone);
+            let future = self.generate_single_program(messages_clone, model_clone, strip_wrapper);
             futures.push(future);
         }
 

@@ -55,7 +55,7 @@ pub fn prob_coin(prob: f32) -> bool {
 }
 
 pub fn rand_comb_len() -> usize {
-    let lens: Vec<usize> = (crate::config::DEFAULT_COMB_LEN..10).collect();
+    let lens: Vec<usize> = (4..6).collect();
     let select_len = random_select(&lens);
     *select_len
 }
