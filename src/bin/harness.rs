@@ -34,7 +34,12 @@ enum Commands {
     /// Report coverage for CNTG fused programs
     ReportCoverage,
     /// Record coverage based on the seed meta file to the same file
-    RecordCoverage,
+    RecordCoverage {
+        /// The number of seeds that are batched together for coverage
+        /// collection.
+        #[clap(short, long, default_value_t = 100)]
+        batch_size: usize,
+    },
     /// Create seeds, fuse them, and report coverage. Pass fuzzer arguments after the command.
     All {
         #[clap(raw = true)]
@@ -120,12 +125,12 @@ fn report_coverage(project: String) -> Result<()> {
     Ok(())
 }
 
-fn record_coverage(project: String) -> Result<()> {
+fn record_coverage(project: String, batch_size: usize) -> Result<()> {
     let deopt = Deopt::new(project)?;
     let seed_meta_path: &Path = &deopt.get_seed_meta_path()?;
     let mut seed_metas = SeedMetas::try_from(seed_meta_path)?;
     log::info!("Calculating coverage for {} seeds", seed_metas.len());
-    seed_metas.update_cov(&deopt)?;
+    seed_metas.update_cov(&deopt, batch_size)?;
     log::info!("Writing result to {}", &seed_meta_path.to_str().unwrap_or("unknown"));
     seed_metas.write_to(&seed_meta_path)?;
     Ok(())
@@ -186,8 +191,10 @@ fn main() -> ExitCode {
             }
             return ExitCode::SUCCESS;
         }
-        Commands::RecordCoverage => {
-            if let Err(err) = record_coverage(project) {
+        Commands::RecordCoverage {
+            batch_size
+        } => {
+            if let Err(err) = record_coverage(project, *batch_size) {
                 log::error!("Failed to record coverage: {}", err);
                 return ExitCode::FAILURE;
             }
