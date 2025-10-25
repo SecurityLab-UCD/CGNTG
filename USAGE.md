@@ -95,7 +95,14 @@ cargo run --bin fuzzer -- zlib -c $(nproc) -r
 
 Once the API sequences are generated, you can fuse them into a single executable and collect coverage to benchmark the effectiveness of the generated API combinations.
 
-Take `zlib` as an example. You can run this command to fuse the programs into a single executable:
+Run the following command to record coverage-over-time to the seed metadata file
+(located at `output/<lib>/seed_metas.csv`)
+
+`cargo run --bin harness -- <lib> record-coverage`
+
+#### Fine-grained control
+
+You can run this command to fuse the programs into a single executable:
 
 `cargo run --bin harness -- zlib fuse-seeds`
 

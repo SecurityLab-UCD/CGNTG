@@ -1,3 +1,11 @@
+/// This module contains CNTGProgram, used for coverage collection for
+/// specifically CNTG programs
+///
+/// CNTG programs generated via ApiCombination mode differs from fuzzers in that
+/// CNTG programs require a main method.
+
+pub mod seed_metas;
+
 use crate::deopt::Deopt;
 use std::path::{Path, PathBuf};
 use eyre::{Context, Result, eyre};
@@ -17,16 +25,17 @@ impl CNTGProgram {
     pub fn new(
         programs: Vec<PathBuf>,
         batch_size: usize,
-        deopt: Deopt,
+        deopt: &Deopt,
     ) -> Self {
         Self {
             programs,
             batch: batch_size,
-            deopt,
+            deopt: deopt.clone(),
         }
     }
 
-    fn init(&self) -> Result<()> {
+    /// Initialize the default directories by clearing old data
+    pub fn reset(&self) -> Result<()> {
         let cntg_dir = self.deopt.get_library_cntg_dir()?;
         if cntg_dir.exists() {
             std::fs::remove_dir_all(cntg_dir)?;
@@ -38,59 +47,38 @@ impl CNTGProgram {
         Ok(())
     }
 
-    // clone the programs to a tmp directory to avoid editing the raw programs
-    fn clone_programs(&self) -> Result<Vec<PathBuf>> {
+    /// Clone the programs to dst_dir and work on the cloned programs from now
+    /// on.
+    ///
+    /// Returns cloned program paths
+    pub fn chdir(&mut self, dst_dir: &Path) -> Result<Vec<PathBuf>> {
         let mut new_programs = Vec::new();
-        let tmp_dir = self.deopt.get_library_driver_dir()?;
-        
         for (id, program) in self.programs.iter().enumerate() {
-            let mut dst_path = tmp_dir.clone();
-            dst_path.push(format!("id_{number:>0width$}.cc", number = id, width = 6));
+            let dst_path = dst_dir.join(format!("id_{number:>0width$}.cc", number = id, width = 6));
             std::fs::copy(program, &dst_path)
                 .context(format!("Unable to copy {program:?} to {dst_path:?}"))?;
             new_programs.push(dst_path);
         }
+        self.programs = new_programs.clone();
         Ok(new_programs)
     }
 
-    pub fn transform(&mut self) -> Result<()> {
-        // TODO: Parallel processing to speed up transformation.
-        self.init()?;
-        self.programs = self.clone_programs()?;
-        
-        log::info!("Transform the correct programs to CNTG programs!");
-        Ok(())
-        // Currently CNTGProgram does not seem to need preprocessing. It is also incompatible with the fuzzer preprocessing.
-        //for program in &self.programs {
-        //    log::trace!("transform {program:?}");
-        //    let mut transformer = crate::program::transform::Transformer::new_cntg(program, &self.deopt)?;
-        //    transformer.preprocess()?;
-        //}
-        //Ok(())
-    }
-
     /// Synthesize the separate CNTG drivers/seeds into a large programs.
-    /// 
+    ///
     /// Each program contains `self.batch` number of seeds and a large core that calls functions in each seed sequentially.
-    pub fn synthesis(&mut self) -> Result<()> {
+    pub fn synthesis(&mut self, outdir: &Path) -> Result<()> {
         log::info!("synthesis huge CNTG cores!");
-        let driver_dir = self.deopt.get_library_driver_dir()?;
-        let drivers: Vec<PathBuf> = crate::deopt::utils::read_sort_dir(&driver_dir)?
-            .iter()
-            .filter(|x| x.extension().is_some() && x.extension().unwrap().to_string_lossy() == "cc")
-            .cloned()
-            .collect();
 
         let mut batch = Vec::new();
         let mut batch_id = Vec::new();
         let mut core_id = 0;
 
-        for (i, driver) in drivers.iter().enumerate() {
+        for (i, driver) in self.programs.clone().iter().enumerate() {
             batch.push(driver.clone());
             batch_id.push(i);
-            if batch.len() == self.batch || i == drivers.len() - 1 {
+            if batch.len() == self.batch || i == self.programs.len() - 1 {
                 let core_content = self.synthesis_batch(&batch_id)?;
-                self.fuse_core(core_content, core_id, &batch, &batch_id)?;
+                self.fuse_core(outdir, core_content, core_id, &batch, &batch_id)?;
                 batch.clear();
                 batch_id.clear();
                 core_id += 1;
@@ -134,12 +122,13 @@ impl CNTGProgram {
     /// Write the single core with multiple drivers' source files, renaming driver functions to link with core.
     fn fuse_core(
         &self,
+        outdir: &Path,
         core_content: String,
         core_id: usize,
         drivers: &[PathBuf],
         driver_id: &[usize],
     ) -> Result<()> {
-        let core_dir = self.get_core_dir(core_id)?;
+        let core_dir = self.get_core_dir(outdir, core_id)?;
         crate::deopt::utils::create_dir_if_nonexist(&core_dir)?;
         // write the condensed core
         let core_path: PathBuf = [core_dir.clone(), "core.cc".into()].iter().collect();
@@ -156,14 +145,14 @@ impl CNTGProgram {
         Ok(())
     }
 
-    fn get_core_dir(&self, core_id: usize) -> Result<PathBuf> {
-        let core_dir: PathBuf = [
-            self.deopt.get_library_cntg_dir()?,
-            format!("Core_{core_id:0>width$}", width = 3).into(),
-        ]
-        .iter()
-        .collect();
-        Ok(core_dir)
+    fn get_core_dir(&self, outdir: &Path, core_id: usize) -> Result<PathBuf> {
+        //let core_dir: PathBuf = [
+        //    //self.deopt.get_library_cntg_dir()?,
+        //    format!("Core_{core_id:0>width$}", width = 3).into(),
+        //]
+        //.iter()
+        //.collect();
+        Ok(outdir.join(format!("Core_{core_id:0>width$}", width = 3)))
     }
 
     fn change_driver_id(
@@ -183,11 +172,15 @@ impl CNTGProgram {
         Ok(())
     }
 
-    pub fn compile(&self) -> Result<()> {
+    /// Compile all cores in cores_dir
+    ///
+    /// Each core should be in a folder generated by synthesis:
+    /// <cores_dir>/Core_<id>/core.cc
+    pub fn compile(&self, cores_dir: &Path) -> Result<()> {
         let executor = crate::execution::Executor::new(&self.deopt)?;
         std::thread::scope(|s| {
             let mut handles = Vec::<std::thread::ScopedJoinHandle::<()>>::new();
-            for dir in std::fs::read_dir(self.deopt.get_library_cntg_dir().unwrap()).unwrap() {
+            for dir in std::fs::read_dir(cores_dir).unwrap() {
                 handles.push(
                     s.spawn(|| {
                         let core_dir = dir.unwrap().path();

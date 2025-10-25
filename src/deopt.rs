@@ -479,6 +479,13 @@ impl Deopt {
         Ok(seed_path)
     }
 
+    /// Returns log file path where metadata for seeds are saved
+    pub fn get_seed_meta_path(&self) -> Result<PathBuf> {
+        let lib_dir = self.get_library_output_dir()?;
+        let meta_path = lib_dir.join("seed_meta.csv");
+        Ok(meta_path)
+    }
+
     pub fn get_seed_work_dir_by_id(&self, id: usize) -> Result<PathBuf> {
         let work_dir = self.get_library_work_dir()?;
         let seed_work_dir: PathBuf = [

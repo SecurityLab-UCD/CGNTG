@@ -8,6 +8,7 @@ pub mod fuzzer;
 pub mod minimize;
 pub mod mutation;
 pub mod program;
+pub mod cntg_program;
 pub mod request;
 use async_openai::error::OpenAIError;
 use config::get_library_name;

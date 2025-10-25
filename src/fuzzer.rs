@@ -12,15 +12,15 @@ use crate::{
     minimize::minimize,
     program::{libfuzzer::LibFuzzer, rand::rand_comb_len, serde::Deserializer, Program},
     request::{self, prompt::Prompt},
+    cntg_program::seed_metas::SeedMetas,
 };
 use tree_sitter::{Parser, TreeCursor};
 
 use eyre::Result;
 use std::collections::HashSet;
-
 use std::io::Write;
-
 use std::time::{Duration, Instant};
+use std::option::Option;
 
 pub struct Fuzzer {
     pub deopt: Deopt,
@@ -405,6 +405,7 @@ impl Fuzzer {
                 );
             }
         } else if get_config().generation_mode == config::GenerationModeP::ApiCombination {
+            let mut seed_metas = SeedMetas::new(&Instant::now());
             //    log::info!("Using api combination mode, initial prompt: {prompt:?}");
             self.schedule.initialize_energies_for_api_mode();
             // let mut file = std::fs::OpenOptions::new()
@@ -469,7 +470,8 @@ impl Fuzzer {
                 let mut round_newly_discovered_pairs: HashSet<(String, String,String)> = HashSet::new();
                 let mut successful_programs_this_round: Vec<Program> = Vec::new();
                 for program in programs {
-                    self.deopt.save_succ_program(&program)?;
+                    let seed_path = self.deopt.save_succ_program(&program)?;
+                    seed_metas.add(&seed_path, Instant::now(), None);
                     let cpp_code = &program.statements;
                     let calls = Self::extract_function_calls(cpp_code);
                     let pairs = Self::extract_3gram_triples(&calls);
@@ -530,6 +532,11 @@ impl Fuzzer {
                     break;
                 }
             }
+            let result = seed_metas.write_to(&self.deopt.get_seed_meta_path().unwrap());
+            if result.is_err() {
+                log::error!("Failed to write seed meta data!");
+            }
+
         }
         log::info!("Fuzzing loop finished. Starting minimization...");
 

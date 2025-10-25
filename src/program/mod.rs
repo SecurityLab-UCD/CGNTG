@@ -6,7 +6,6 @@ pub mod rand;
 pub mod serde;
 pub mod shim;
 pub mod transform;
-pub mod cntg;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
