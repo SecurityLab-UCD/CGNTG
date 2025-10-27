@@ -103,7 +103,7 @@ impl SeedMetas {
         for (batch_id, seed_meta_batch) in &mut self.seed_metas.chunks_mut(batch_size).enumerate() {
             // Set up coverage environment
             let seed_paths: Vec<_> = seed_meta_batch.iter().map(|seed_meta| seed_meta.seed_path.clone()).collect();
-            let mut program = CNTGProgram::new(seed_paths.clone(), 1, deopt);
+            let mut program = CNTGProgram::new(seed_paths.clone(), batch_size, deopt);
             let stems: Vec<_> = seed_paths.iter().map(|seed_path| seed_path.file_stem()).collect();
             let lower_stem = seed_paths.first().unwrap().file_stem().unwrap().to_str().unwrap_or("unknown");
             let higher_stem = seed_paths.last().unwrap().file_stem().unwrap().to_str().unwrap_or("unknown");
@@ -126,6 +126,7 @@ impl SeedMetas {
             let seed_profdata_path: PathBuf = seed_dir.join("default.profdata");
             let coverage: CodeCoverage;
             if cumulative_profile_exists {
+                log::debug!("Merging profile data...");
                 Executor::merge_profdata(&vec![cumulative_profile_path.clone(), seed_profdata_path.clone()], &cumulative_profile_path)?;
                 coverage = executor.obtain_cov_summary_from_profdata(&cumulative_profile_path)?;
             } else {
