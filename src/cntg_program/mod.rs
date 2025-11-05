@@ -12,6 +12,7 @@ use eyre::{Context, Result, eyre};
 
 /// CNTGProgram represents a single executable created from multiple API combination programs.
 /// Unlike LibFuzzer, this keeps the original main() functions and fuses them into one binary.
+#[derive(Clone)]
 pub struct CNTGProgram {
     /// programs to fuse into a single executable
     programs: Vec<PathBuf>,

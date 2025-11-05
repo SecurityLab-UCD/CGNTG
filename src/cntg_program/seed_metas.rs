@@ -97,7 +97,7 @@ impl SeedMetas {
 
         // Iterate over each seed_meta sequentially for future modification
         let workspace_dir = deopt.get_library_work_dir()?.join("coverage");
-        fs::remove_dir_all(&workspace_dir)?;
+        let _ = fs::remove_dir_all(&workspace_dir);
         let mut cumulative_profile_exists = false;
         let cumulative_profile_path = workspace_dir.join("cumulative_profile.profdata");
         for (batch_id, seed_meta_batch) in &mut self.seed_metas.chunks_mut(batch_size).enumerate() {
@@ -115,12 +115,34 @@ impl SeedMetas {
             }
             fs::create_dir_all(&seed_dir)?;
 
-            // Create coverage information
+            // Compile program
             let executor = Executor::new(&deopt)?;
             program.chdir(&seed_dir)?;
             program.synthesis(&seed_dir)?;
             program.compile(&seed_dir)?;
+
+            // Execute program
             executor.collect_cntg_cov_all_cores(&seed_dir)?;
+            let (tx, rx) = std::sync::mpsc::channel();
+            let handle = std::thread::spawn({
+                let local_executor = executor.clone();
+                let local_seed_dir = seed_dir.clone();
+                move || {
+                    let result = local_executor.collect_cntg_cov_all_cores(&local_seed_dir);
+                    tx.send(result).unwrap();
+                }
+            });
+            match rx.recv_timeout(Duration::from_secs(60)) {
+                Ok(Err(err)) => {
+                    log::warn!("Failed to collect coverage for batch {batch_id}");
+                    continue;
+                },
+                Err(_) => {
+                    log::warn!("Execution of batch {batch_id} timed out!");
+                    continue;
+                },
+                Ok(Ok(_)) => {}
+            }
 
             // Parse and record
             let seed_profdata_path: PathBuf = seed_dir.join("default.profdata");
