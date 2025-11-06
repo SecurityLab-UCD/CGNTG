@@ -122,7 +122,6 @@ impl SeedMetas {
             program.compile(&seed_dir)?;
 
             // Execute program
-            executor.collect_cntg_cov_all_cores(&seed_dir)?;
             let (tx, rx) = std::sync::mpsc::channel();
             let handle = std::thread::spawn({
                 let local_executor = executor.clone();
@@ -132,7 +131,7 @@ impl SeedMetas {
                     tx.send(result).unwrap();
                 }
             });
-            match rx.recv_timeout(Duration::from_secs(60)) {
+            match rx.recv_timeout(Duration::from_secs(30)) {
                 Ok(Err(err)) => {
                     log::warn!("Failed to collect coverage for batch {batch_id}");
                     continue;
