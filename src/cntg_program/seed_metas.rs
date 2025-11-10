@@ -86,39 +86,68 @@ impl SeedMetas {
         Ok(())
     }
 
-    pub fn update_cov(&mut self, deopt: &Deopt) -> Result<()> {
+    /// Update the cumulative_coverage of seeds
+    ///
+    /// Coverage computation can be batched for speed up. `batch_size` seeds
+    /// will be fused together, and their coverage will be computed together.
+    pub fn update_cov(&mut self, deopt: &Deopt, batch_size: usize) -> Result<()> {
         // Ensure seed metas are processed in chronological order
         self.seed_metas
             .sort_by_key(|m| m.duration_since_start);
 
         // Iterate over each seed_meta sequentially for future modification
         let workspace_dir = deopt.get_library_work_dir()?.join("coverage");
-        fs::remove_dir_all(&workspace_dir)?;
+        let _ = fs::remove_dir_all(&workspace_dir);
         let mut cumulative_profile_exists = false;
         let cumulative_profile_path = workspace_dir.join("cumulative_profile.profdata");
-        for seed_meta in &mut self.seed_metas {
-            let seed_path = seed_meta.seed_path.clone();
-            let mut program = CNTGProgram::new(vec![seed_path.clone()], 1, deopt);
-            let stem = seed_path.file_stem().ok_or_else(|| eyre!("Invalid seed path"))?;
-            let seed_dir = workspace_dir.join(stem);
+        for (batch_id, seed_meta_batch) in &mut self.seed_metas.chunks_mut(batch_size).enumerate() {
+            // Set up coverage environment
+            let seed_paths: Vec<_> = seed_meta_batch.iter().map(|seed_meta| seed_meta.seed_path.clone()).collect();
+            let mut program = CNTGProgram::new(seed_paths.clone(), batch_size, deopt);
+            let stems: Vec<_> = seed_paths.iter().map(|seed_path| seed_path.file_stem()).collect();
+            let lower_stem = seed_paths.first().unwrap().file_stem().unwrap().to_str().unwrap_or("unknown");
+            let higher_stem = seed_paths.last().unwrap().file_stem().unwrap().to_str().unwrap_or("unknown");
+            let seed_dir = workspace_dir.join(batch_id.to_string() + "_" + lower_stem + "_" + &higher_stem);
             match fs::remove_dir_all(&seed_dir) {
                 Ok(_) => (),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
                 Err(e) => return Err(eyre!(e)),
             }
             fs::create_dir_all(&seed_dir)?;
+
+            // Compile program
+            let executor = Executor::new(&deopt)?;
             program.chdir(&seed_dir)?;
             program.synthesis(&seed_dir)?;
             program.compile(&seed_dir)?;
 
-            let executor = Executor::new(&deopt)?;
-            executor.collect_cntg_cov_all_cores(&seed_dir)?;
-            let seed_profdata_path: PathBuf = seed_dir.join("default.profdata");
-            if !cumulative_profile_exists {
+            // Execute program
+            let (tx, rx) = std::sync::mpsc::channel();
+            let handle = std::thread::spawn({
+                let local_executor = executor.clone();
+                let local_seed_dir = seed_dir.clone();
+                move || {
+                    let result = local_executor.collect_cntg_cov_all_cores(&local_seed_dir);
+                    tx.send(result).unwrap();
+                }
+            });
+            match rx.recv_timeout(Duration::from_secs(30)) {
+                Ok(Err(err)) => {
+                    log::warn!("Failed to collect coverage for batch {batch_id}");
+                    continue;
+                },
+                Err(_) => {
+                    log::warn!("Execution of batch {batch_id} timed out!");
+                    continue;
+                },
+                Ok(Ok(_)) => {}
             }
 
+            // Parse and record
+            let seed_profdata_path: PathBuf = seed_dir.join("default.profdata");
             let coverage: CodeCoverage;
             if cumulative_profile_exists {
+                log::debug!("Merging profile data...");
                 Executor::merge_profdata(&vec![cumulative_profile_path.clone(), seed_profdata_path.clone()], &cumulative_profile_path)?;
                 coverage = executor.obtain_cov_summary_from_profdata(&cumulative_profile_path)?;
             } else {
@@ -127,10 +156,9 @@ impl SeedMetas {
                 cumulative_profile_exists = true;
             }
             let coverage_summary = coverage.get_total_summary();
-            seed_meta.cumulative_branch_coverage = Some(coverage_summary.get_percent_branch_covered());
+            seed_meta_batch.iter_mut().for_each(|seed_meta| seed_meta.cumulative_branch_coverage = Some(coverage_summary.get_percent_branch_covered()));
 
-            let seed_path_str = seed_path.to_str().unwrap_or("unknown");
-            log::debug!("Cumulative coverage for {} is {}", seed_path_str, &seed_meta.cumulative_branch_coverage.unwrap());
+            log::debug!("Cumulative coverage from seed {} to {} is {}", &lower_stem, &higher_stem, &coverage_summary.get_percent_branch_covered());
         }
         Ok(())
     }

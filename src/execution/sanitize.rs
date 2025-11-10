@@ -16,11 +16,12 @@ use crate::{
     Deopt,
 };
 use eyre::Result;
-use std::io::Write;
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::Duration,
+    io::Write,
+    sync::mpsc::channel,
 };
 use wait_timeout::ChildExt;
 
@@ -232,36 +233,27 @@ impl Executor {
             "lcms"=> "lcms2",
             other => other,
         };
-        let mut child = Command::new("clang++")
-            .arg(&temp_path)
-            .arg("-o")
-            .arg(&binary_out)
-            .arg("-std=c++17") // ✅ 指定 C++ 编译标准版本
-            .arg(&self.header_cmd)
-            .arg(format!("-L{}", lib_dir.to_string_lossy()))
-            .arg(format!("-l{}", real_lib_name))
-            .stderr(Stdio::piped())
-            .spawn()?;
-
+        let (tx, rx) = channel();
+        let handle = std::thread::spawn({
+            let s = self.clone();
+            let t = temp_path.clone();
+            let b = binary_out.clone();
+            move || {
+                let result = s.compile(vec![&t], &b, crate::execution::Compile::CoverageNoFuzz);
+                tx.send(result).unwrap();
+            }
+        });
         let timeout = Duration::from_secs(10); // 设置10秒超时
-        match child.wait_timeout(timeout)? {
-            Some(status) => {
-                if !status.success() {
-                    let output = child.wait_with_output()?;
-                    let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
-                    return Ok(Some(ProgramError::Link(err_msg)));
-                }
-            }
-            None => {
-                // 子进程超时
-                child.kill()?;
-                child.wait()?; // 等待进程被完全清理
-                return Ok(Some(ProgramError::Hang(
-                    "Compilation timed out".to_string(),
-                )));
-            }
+        match rx.recv_timeout(timeout) {
+            Ok(Err(err)) => {
+                return Ok(Some(ProgramError::Link("Unknown because the compilation command output is not captured".to_owned())));
+            },
+            Err(_) => {
+                log::warn!("Child compilation thread is hanging and is not terminated");
+                return Ok(Some(ProgramError::Hang("Compilation timed out".to_owned())));
+            },
+            Ok(Ok(_)) => {}
         }
-
         let mut exec_child = Command::new(&binary_out)
             .stdout(Stdio::null())
             .stderr(Stdio::piped())

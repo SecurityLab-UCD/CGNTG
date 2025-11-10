@@ -12,6 +12,7 @@ use eyre::{Context, Result, eyre};
 
 /// CNTGProgram represents a single executable created from multiple API combination programs.
 /// Unlike LibFuzzer, this keeps the original main() functions and fuses them into one binary.
+#[derive(Clone)]
 pub struct CNTGProgram {
     /// programs to fuse into a single executable
     programs: Vec<PathBuf>,
@@ -67,7 +68,7 @@ impl CNTGProgram {
     ///
     /// Each program contains `self.batch` number of seeds and a large core that calls functions in each seed sequentially.
     pub fn synthesis(&mut self, outdir: &Path) -> Result<()> {
-        log::info!("synthesis huge CNTG cores!");
+        log::debug!("synthesis huge CNTG cores!");
 
         let mut batch = Vec::new();
         let mut batch_id = Vec::new();
@@ -185,7 +186,7 @@ impl CNTGProgram {
                     s.spawn(|| {
                         let core_dir = dir.unwrap().path();
                         if core_dir.is_dir() {
-                            log::info!("Compile to Core: {core_dir:?}");
+                            log::debug!("Compile to Core: {core_dir:?}");
                             let core_binary = get_core_path(&core_dir);
                             executor.compile_lib_fuzzers(
                                 &core_dir,
