@@ -167,9 +167,21 @@ impl Executor {
             crate::config::EXECUTION_TIMEOUT
         };
 
+        // 设置 LD_LIBRARY_PATH 以确保使用正确版本的动态库
+        let lib_path = if let Ok(build_dir) = self.deopt.get_library_build_dir() {
+            format!("{}/lib:{}/lib64:{}",
+                build_dir.display(),
+                build_dir.display(),
+                std::env::var("LD_LIBRARY_PATH").unwrap_or_default()
+            )
+        } else {
+            std::env::var("LD_LIBRARY_PATH").unwrap_or_default()
+        };
+
         let child = exec
             .current_dir(current_dir)
             .env("ASAN_OPTIONS", asan_options)
+            .env("LD_LIBRARY_PATH", lib_path)
             .arg(rss_limit)
             .arg(format!("-timeout={}", timeout))
             .arg("-close_fd_mask=3")

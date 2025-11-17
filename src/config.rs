@@ -331,16 +331,34 @@ Here are the custom types declared in {project}. Ensure that the variables you u
 ----------------------
 ";
 pub const ERROR_REPAIR_TEMPLATE: &str =
-    "The previous attempt to generate code failed with the following error:
+"The previous attempt to generate code failed with the following error:
 
 Error code:{error_code}
 Error Type: {error_type}
 Error Details:{error_details}
 Please regenerate a new program to repair the error without changing the logic, do not redefine main function and any other parameters even if the error is not defined, and do not change the function name.
 If error type is execution error without error details, you can regard it as Segmentation fault (core dumped)
+Do not include if branches or loops; the function should be a straight-line sequence of API calls.
 ";
 
 pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically correct C++ function named `int test_{project}_api_sequence()` using the {project} library.
+
+The API sequence should focus on the usage of the {project} library, and several essential aspects of the library are provided below.
+
+Here are the system headers included in {project}. You can utilize the public elements of these headers:
+----------------------
+{headers}
+----------------------
+
+Here are the APIs exported from {project}. You are encouraged to use any of the following APIs once you need to create, initialize or destroy variables:
+----------------------
+{APIs}
+----------------------
+
+Here are the custom types declared in {project}. Ensure that the variables you use do not violate declarations:
+----------------------
+{context}
+----------------------
 
 Use the following APIs in your function:
 {combinations}
@@ -353,7 +371,7 @@ Function Requirements:
 4. Do not use `std::memset`; use plain `memset`.  do not create new functions, use the existing APIs.
 5. The function must end with:
    API sequence test completed successfully
-6. When you enter a new phase, use `// step ...` to indicate the phase. different operations are in different steps, steps cannot exceed 6
+6. When you enter a new phase, use `// step ...` to indicate the phase. different operations are in different steps, steps cannot exceed 4
 
 Below is project's specific rules:
 {project_rules}
@@ -406,29 +424,36 @@ Use the following APIs in your plan:
 Please create a detailed execution plan (in natural language, not code) for generating a C function `int test_{project}_api_sequence()` that uses the above APIs.
 
 Your execution plan should:
-1. Include the complete API declarations for the main APIs listed above
-2. If auxiliary/helper APIs are needed (for setup/cleanup), you may list them but don't need to include their full declarations
-3. Describe step-by-step how to use these APIs following the pattern: Initialize → Configure → Operate → Validate → Cleanup
+1. List the main API names (not their full declarations - they're already in library headers)
+2. If auxiliary/helper APIs are needed (for setup/cleanup), just mention their names
+3. Describe step-by-step how to use these APIs following the pattern: Initialize → Configure → Operate → Cleanup
 4. Explain the logic and data flow between API calls
 5. Be detailed enough that code can be generated from it in the next phase
+
+**CRITICAL:** In the next phase, the generated code will:
+- Include the library header file (e.g., #include <lcms2.h>)
+- All types, structs, and function prototypes are ALREADY defined in the library headers
+- The code should NOT redeclare types, use extern blocks, or redefine function prototypes
+- Only the function implementation should be written
 
 Requirements for the final code (describe how to meet these in your plan):
 - Function must return 66 on success
 - No if branches or loops; straight-line sequence of API calls only
-- Must not redefine or include the {project} library
+- Must not redefine types or function declarations (library headers provide everything)
 - Do not use std::memset; use plain memset
 - Do not create new functions, use existing APIs
 - Function must end with: API sequence test completed successfully
-- Divide into steps (no more than 5 steps)
+- Divide into steps (no more than 3 steps)
+- Every build function should not pass 0 or NULL as parameters
 
 Output format:
 Write a natural language description explaining:
-- What variables need to be declared
+- What variables need to be declared (e.g., \"cmsHPROFILE hProfile\")
 - What each step should do
 - How data flows between API calls
 - What cleanup is needed
 
-**Do NOT write actual C/C++ code. Only write the execution plan in natural language.**
+**Do NOT write actual C/C++ code, type definitions, or function prototypes. Only write the execution plan in natural language.**
 
 ";
 
@@ -439,6 +464,19 @@ Do not include if branches or loops; the function should be a straight-line sequ
 Execution Plan:
 {execution_plan}
 
+**CRITICAL CODE GENERATION RULES:**
+1. **DO NOT declare or redefine any types, structs, or typedefs** - All types are already defined in the included library headers
+2. **DO NOT use extern \"C\" blocks** - The library headers already handle this
+3. **DO NOT redeclare any function prototypes** - All functions are already declared in the included headers
+4. **ONLY write the function implementation** - Start directly with: `int test_{project}_api_sequence() {{`
+5. **DO NOT include any #ifdef, #ifndef, or preprocessor directives** in your code
+
+Your code should ONLY contain:
+- The function signature: `int test_{project}_api_sequence()`
+- Variable declarations inside the function
+- API calls
+- Return statement
+
 Below is project's specific rules:
 {project_rules}
 
@@ -446,6 +484,17 @@ Here are some successful examples for reference:
 {successful_examples}
 
 Again do not include if branches or loops; the function should be a straight-line sequence of API calls.
+code example outline:
+```cpp
+int test_{project}_api_sequence() {{
+    // Step 1:
+    // Step 2: 
+    // Step 3: 
+    //printf
+    return 66;
+}}
+
+**Remember: DO NOT declare types, use extern blocks, or redeclare functions. Only write the function body.**
 ";
 
 pub fn get_project_rules() -> String {
@@ -478,13 +527,13 @@ pub fn get_project_rules() -> String {
     }
     template
 }
-pub const raw_rule: &str = "
+pub const RAW_RULE: &str = "
 {project_rules}
 ";
 pub fn get_raw_project_rules() -> String {
     let library_name = get_library_name();
     
-    let mut template =raw_rule.to_string();
+    let mut template = RAW_RULE.to_string();
     if library_name == "cre2" {
         template = template.replace("{project_rules}", "
         1. Do not use CRE2_ANCHOR_UNANCHORED，use CRE2_UNANCHORED instead.
@@ -504,6 +553,8 @@ pub fn get_raw_project_rules() -> String {
         template = template.replace("{project_rules}", "
         1. Never assign handles (cmsHANDLE, cmsMLU*, cmsToneCurve*, etc.) to integer or malloc() values. Always use official creation APIs (e.g., cmsCIECAM02Init, cmsMLUalloc).
         2. When create cmsViewingConditions, the parameter is cmsCIEXYZ* whitePoint, cmsUInt32Number  surround, not cmsCIEXYZ whitePoint
+        3. cmsToneCurve Curve[3] will cause error, you should use offical API to build
+        4. When generating or modifying IT8/CGATS inputs, always ensure the memory buffer length is greater than 0 (len > 0) and include a valid file header (e.g., CGATS or IT8) to avoid triggering cmsIT8LoadFromMem assertions.
         ");
     }
     template

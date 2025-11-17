@@ -19,7 +19,8 @@ function download() {
         coscli cp cos://sbd-testing-1251316161/bench_archive/LLM_FUZZ/archives/${PROJECT_NAME}.tar.gz ${PROJECT_NAME}.tar.gz
         tar -xvf ${PROJECT_NAME}.tar.gz && rm ${PROJECT_NAME}.tar.gz
     else
-        git clone --depth 1 https://github.com/pnggroup/libpng.git
+        git clone --depth 1 -b libpng16 https://github.com/pnggroup/libpng.git
+
     fi
     cd libpng
     # See in https://github.com/glennrp/libpng/blob/libpng16/contrib/oss-fuzz/libpng_read_fuzzer.cc.

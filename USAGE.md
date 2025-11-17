@@ -90,6 +90,7 @@ cd /data/zlib
 export OPENAI_MODEL_NAME="gpt-4o-mini-2024-07-18"
 cargo run --bin fuzzer -- zlib -c $(nproc) -r
 ```
+Library name: zlib, cJSON, cre2, lcms, sqlite3,libpng,
 
 ### 5. Benchmarking API Combinations
 

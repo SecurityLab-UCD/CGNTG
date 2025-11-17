@@ -208,31 +208,11 @@ impl Executor {
             return self.validate_cre2_program(&temp_path);
         }
         
-        // if let Some(err) = self.is_program_link_correct(&temp_path)? {
-        //     return Ok(Some(err));
-        // }
-        // execute the program to check whether it is correct.
-        // execute the program to check whether it is correct.
+        // Compile and execute the program to check whether it is correct.
         let binary_out = temp_path.with_extension("out");
+        log::debug!("Compiling program: {}", temp_path.display());
 
-        // 直接构建 clang++ 命令，模拟 `clang++ try.cc -o a -lz`
-        let lib_dir = self.deopt.get_library_build_lib_path()?;
-        log::debug!(
-            "Compiling program: {} with lib dir: {}",
-            temp_path.display(),
-            lib_dir.display()
-        );
-        let lib_name = get_library_name();
-        let real_lib_name = match lib_name.as_str() {
-            "zlib" => "z", // zlib 实际上是 libz
-            "ssl" => "ssl",
-            "libpng" => "png",
-            "libaom"=>"aom",
-            "crypto" => "crypto",
-            "cre2" => "re2",
-            "lcms"=> "lcms2",
-            other => other,
-        };
+        // Compile in a separate thread with timeout to prevent hanging
         let (tx, rx) = channel();
         let handle = std::thread::spawn({
             let s = self.clone();
@@ -246,7 +226,8 @@ impl Executor {
         let timeout = Duration::from_secs(10); // 设置10秒超时
         match rx.recv_timeout(timeout) {
             Ok(Err(err)) => {
-                return Ok(Some(ProgramError::Link("Unknown because the compilation command output is not captured".to_owned())));
+                log::error!("Compilation failed: {}", err);
+                return Ok(Some(ProgramError::Link(format!("Compilation failed: {}", err))));
             },
             Err(_) => {
                 log::warn!("Child compilation thread is hanging and is not terminated");
@@ -254,7 +235,15 @@ impl Executor {
             },
             Ok(Ok(_)) => {}
         }
+        
+        // 设置 LD_LIBRARY_PATH 以确保使用正确版本的动态库
+        let lib_path = format!("{}/lib:{}",
+            self.deopt.get_library_build_dir()?.display(),
+            std::env::var("LD_LIBRARY_PATH").unwrap_or_default()
+        );
+        
         let mut exec_child = Command::new(&binary_out)
+            .env("LD_LIBRARY_PATH", lib_path)
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()?;

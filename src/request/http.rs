@@ -748,6 +748,38 @@ impl super::Handler for HttpHandler {
 
         Ok(programs)
     }
+    fn generate_single(&self, prompt: &super::prompt::Prompt) -> eyre::Result<Program> {
+        let start = std::time::Instant::now();
+
+        // 将prompt转换为ChatGPT消息
+        let chat_msgs = prompt.to_chatgpt_message();
+
+        // 转换为我们的消息格式
+        let messages: Vec<OpenAIMessage> = chat_msgs
+            .iter()
+            .map(|msg| HttpClient::convert_chat_message(msg))
+            .collect();
+
+        // 获取配置
+        let model = crate::config::get_openai_model_name().clone();
+
+        // 判断是否为CoT Plan阶段（不需要strip）
+        let strip_wrapper = !matches!(&prompt.task, crate::request::prompt::ProgramTask::CotPlan);
+
+        // 生成单个程序
+        let (program, usage) = self.rt.block_on(self.generate_single_program(messages, model, strip_wrapper))?;
+
+        let elapsed = start.elapsed();
+        log::info!("HTTP Client Generate Single time: {}s", elapsed.as_secs());
+        log::info!(
+            "HTTP Client Token Usage - Prompt: {}, Completion: {}, Total: {}",
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            usage.total_tokens
+        );
+
+        Ok(program)
+    }
 }
 
 #[cfg(test)]

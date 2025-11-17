@@ -9,4 +9,7 @@ pub mod prompt;
 pub trait Handler {
     /// generate programs via a formatted prompt
     fn generate(&self, prompt: &Prompt) -> eyre::Result<Vec<Program>>;
+    
+    /// generate a single program (used for CoT Phase 1: plan generation)
+    fn generate_single(&self, prompt: &Prompt) -> eyre::Result<Program>;
 }

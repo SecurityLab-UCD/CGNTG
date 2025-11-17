@@ -103,6 +103,26 @@ impl Handler for OpenAIHanler {
 
         Ok(programs)
     }
+
+    /// Generate a single program (used for CoT Phase 1: plan generation)
+    fn generate_single(&self, prompt: &super::prompt::Prompt) -> eyre::Result<Program> {
+        let start = std::time::Instant::now();
+        let chat_msgs = prompt.to_chatgpt_message();
+        let result = self.rt.block_on(generate_program_by_chat(chat_msgs));
+        
+        let (program, usage) = result?;
+        
+        let elapsed = start.elapsed();
+        log::info!("OpenAI Generate Single time: {}s", elapsed.as_secs());
+        log::info!(
+            "OpenAI Token Usage - Prompt: {}, Completion: {}, Total: {}",
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            usage.total_tokens
+        );
+
+        Ok(program)
+    }
 }
 
 /// Get the OpenAI interface client.
