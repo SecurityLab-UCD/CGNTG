@@ -1,17 +1,16 @@
 use std::{collections::HashMap, collections::HashSet, f32::consts::E};
 
+use petgraph::algo;
+
 use crate::{
-    deopt::Deopt,
-    mutation::mutate_prompt,
-    program::{
-        gadget::{get_func_gadget, get_func_gadgets, FuncGadget},
+    deopt::Deopt, minimize, mutation::mutate_prompt, program::{
+        gadget::{FuncGadget, get_func_gadget, get_func_gadgets},
         get_exec_counter_value, load_exec_counter,
         rand::{prob_coin, rand_comb_len, weighted_choose},
         set_exec_counter_value,
-    },
-    request::prompt::{
-        get_prompt_counter_value, load_prompt_counter, set_prompt_counter_value, Prompt,
-    },
+    }, request::prompt::{
+        Prompt, get_prompt_counter_value, load_prompt_counter, set_prompt_counter_value
+    }
 };
 
 pub struct Seed {
@@ -20,6 +19,7 @@ pub struct Seed {
     exec_count: u32,
     prompt_count: u32,
     energy: f32,
+    sampling_weight: f32,
 }
 
 impl Seed {
@@ -36,6 +36,7 @@ impl Seed {
             exec_count,
             prompt_count,
             energy: 0_f32,
+            sampling_weight: 0_f32,
         };
         seed.compute_energy(exponent);
         seed
@@ -47,6 +48,7 @@ impl Seed {
             exec_count: 0,   // In API mode, exec_count is not used
             prompt_count: 0, // In API mode, prompt_count is not used
             energy: 1.0, // Assign a base energy value to all APIs to ensure they have a chance to be selected
+            sampling_weight: 1_f32,
         }
     }
     pub fn compute_energy(&mut self, exponent: u32) -> f32 {
@@ -140,6 +142,57 @@ impl Schedule {
             serde_json::to_string(&energies_str).unwrap()
         );
     }
+    pub fn energy_normalization_for_one_seed(&mut self, seed: &Seed)->f32  {
+        let current_energy=seed.energy;
+        let max_energy= self.seeds.values().map(|x| x.energy).fold(f32::MIN, f32::max);
+        let min_energy= self.seeds.values().map(|x| x.energy).fold(f32::MAX, f32::min);
+        let normalized_energy=(current_energy - min_energy)/(max_energy - min_energy);
+
+        normalized_energy
+    }
+    pub fn energy_normalization(&mut self,epsilon:f32) {
+
+        let max_energy = self.seeds.values().map(|x| x.energy).fold(f32::MIN, f32::max);
+        let min_energy = self.seeds.values().map(|x| x.energy).fold(f32::MAX, f32::min);
+        for seed in self.seeds.values_mut() {
+            let current_energy = seed.energy;
+            seed.sampling_weight = epsilon+(1_f32-epsilon)*(current_energy - min_energy) / (max_energy - min_energy);
+        }
+    }
+    pub fn energy_condense(&mut self,num:f32) {
+        for seed in self.seeds.values_mut() {
+            seed.sampling_weight = seed.sampling_weight.powf(num);
+        }
+
+    }
+
+    /// s_t = sigma_t / mu_t
+    pub fn calculate_energy_skewness(&self) -> f32 {
+        let n = self.seeds.len() as f32;
+        if n == 0.0 {
+            return 0.0; 
+        }
+        let sum_energy: f32 = self.seeds.values().map(|x| x.sampling_weight).sum();
+        let mean = sum_energy / n;
+
+        if mean == 0.0 {
+            return 0.0; 
+        }
+        // (1/N) * sum((E - mu)^2)
+        let variance = self.seeds.values()
+            .map(|x| (x.sampling_weight - mean).powi(2)) 
+            .sum::<f32>() / n;
+
+        let std_dev = variance.sqrt();
+        //  s_t = sigma_t / mu_t
+        let s_t = std_dev / mean;
+
+        s_t
+    }
+    pub fn calculate_alpha_t(alpha_min: f32, s_t: f32) -> f32 {
+        alpha_min + (1.0 - alpha_min) * (-s_t).exp()
+    }
+
     pub fn update_energies_from_api_pairs(&mut self, api_pairs: &HashSet<(String, String,String)>) {
         if api_pairs.is_empty() {
             log::warn!("No API pairs found to update energies.");
@@ -148,6 +201,7 @@ impl Schedule {
         for (api1, api2,api3) in api_pairs {
             if let Some(seed) = self.seeds.get_mut(api1) {
                 seed.energy += 1.0;
+            
             }
             if let Some(seed) = self.seeds.get_mut(api2) {
                 seed.energy += 1.0;
@@ -158,9 +212,20 @@ impl Schedule {
         }
         log::debug!("Updated energies from API pairs: {}", api_pairs.len());
         let energies_str: Vec<f32> = self.seeds.values().map(|x| x.energy).collect();
+        
         log::debug!(
             "energies: {}",
             serde_json::to_string(&energies_str).unwrap()
+        );
+        
+        self.energy_normalization(0.01_f32);
+        let s_t=self.calculate_energy_skewness();
+        let alpha_t=Schedule::calculate_alpha_t(0.5_f32,s_t);
+        self.energy_condense(alpha_t);
+        let sample_str: Vec<f32> = self.seeds.values().map(|x| x.sampling_weight).collect();
+        log::debug!(
+            "sampling weights: {}",
+            serde_json::to_string(&sample_str).unwrap()
         );
     }
     pub fn update_prompt(&self, prompt: &mut Prompt, deopt: &mut Deopt) -> eyre::Result<()> {
@@ -219,12 +284,13 @@ impl Schedule {
                 get_func_gadget(api).unwrap_or_else(|| panic!("cannot found api {api} in gadgets"));
             gadgets.push(gadget);
         }
+
         gadgets
     }
 
     pub fn choose_api_by_energy(&self) -> &str {
         let values: Vec<&Seed> = self.seeds.values().collect();
-        let energies: Vec<f32> = values.iter().map(|x| x.energy).collect();
+        let energies: Vec<f32> = values.iter().map(|x| x.sampling_weight).collect();
         let choose = weighted_choose(energies);
         let mut choose_seed = values[choose];
         
@@ -233,7 +299,8 @@ impl Schedule {
         let steepness = 0.1_f32; 
         let midpoint = 50.0_f32; 
         println!("loop count: {}", self.loop_count);
-        let replace_with_lowest_prob = max_prob / (1.0 + E.powf(steepness * (self.loop_count as f32 - midpoint)));
+      //  let replace_with_lowest_prob = max_prob / (1.0 + E.powf(steepness * (self.loop_count as f32 - midpoint)));
+        let replace_with_lowest_prob = 0_f32;
         
         if prob_coin(replace_with_lowest_prob) {
             let mut min_energy = f32::MAX;
