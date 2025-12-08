@@ -201,44 +201,13 @@ impl Fuzzer {
                 let error = self.executor.validate_api_sequence(&program, &self.deopt)?;
 
                 if let Some(err) = error {
-                    // --- 修复逻辑开始 ---
                     log::warn!(
-                        "Program {} failed validation. Attempting to repair. Error: {}",
+                        "Program {} failed validation. Error: {}",
                         program.id,
                         err
                     );
-
-                    prompt.set_repair_task(program.statements.clone(), err.clone());
-                    let mut repaired_programs = self.handler.generate(prompt)?;
-                    if let Some(repaired_program) = repaired_programs.get_mut(0) {
-                        repaired_program.id = program.id;
-
-                        let repair_error = self
-                            .executor
-                            .validate_api_sequence(repaired_program, &self.deopt)?;
-                        if let Some(final_err) = repair_error {
-                            log::error!(
-                                "Repair failed for program {}. Final error: {}",
-                                program.id,
-                                final_err
-                            );
-                            self.deopt.save_err_program(&program, &final_err)?;
-                            logger.log_err(&final_err);
-                        } else {
-                            log::info!("Successfully repaired program {}!", program.id);
-                            succ_programs.push(repaired_program.clone());
-                            logger.log_succ();
-                        }
-                    } else {
-                        log::error!(
-                            "LLM did not return a repaired version for program {}.",
-                            program.id
-                        );
-                        self.deopt.save_err_program(&program, &err)?;
-                        logger.log_err(&err);
-                    }
-                    // 无论修复成功与否，都将任务重置回生成模式
-                    prompt.set_generate_task();
+                    self.deopt.save_err_program(&program, &err)?;
+                    logger.log_err(&err);
                 } else {
                     succ_programs.push(program);
                     logger.log_succ();
