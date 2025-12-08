@@ -511,12 +511,12 @@ impl Fuzzer {
 
                 if has_new_in_round {
                     self.quiet_round = 0;
-                    log::debug!(
-                        "Discovered {} new API pairs in this round.",
-                        round_newly_discovered_pairs.len()
-                    );
-                    self.schedule
-                        .update_energies_from_api_pairs(&round_newly_discovered_pairs);
+                    // log::debug!(
+                    //     "Discovered {} new API pairs in this round.",
+                    //     round_newly_discovered_pairs.len()
+                    // );
+                    // self.schedule
+                    //     .update_energies_from_api_pairs(&round_newly_discovered_pairs);
                 } else if !is_stuck {
                     self.quiet_round += 1;
                 }
