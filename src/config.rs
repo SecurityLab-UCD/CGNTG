@@ -477,8 +477,7 @@ Your code should ONLY contain:
 - API calls
 - Return statement
 
-Below is project's specific rules:
-{project_rules}
+
 
 Here are some successful examples for reference:
 {successful_examples}
