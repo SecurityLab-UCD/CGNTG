@@ -231,7 +231,7 @@ pub struct Config {
     #[arg(long, default_value = "3")]
     pub num_new_pairs: usize,
     /// Enable Chain of Thought (CoT) mode for API combination generation. In CoT mode, LLM first generates an execution plan in natural language, then generates code based on that plan. This can improve correctness for complex libraries.
-    #[arg(long = "cot", default_value = "true")]
+    #[arg(long = "cot", default_value = "false")]
     pub enable_cot: bool,
 }
 
