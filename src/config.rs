@@ -480,8 +480,7 @@ Your code should ONLY contain:
 Below is project's specific rules:
 {project_rules}
 
-Here are some successful examples for reference:
-{successful_examples}
+
 
 Again do not include if branches or loops; the function should be a straight-line sequence of API calls.
 code example outline:
