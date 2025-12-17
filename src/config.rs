@@ -464,12 +464,12 @@ Do not include if branches or loops; the function should be a straight-line sequ
 Execution Plan:
 {execution_plan}
 
-**CRITICAL CODE GENERATION RULES:**
-1. **DO NOT declare or redefine any types, structs, or typedefs** - All types are already defined in the included library headers
-2. **DO NOT use extern \"C\" blocks** - The library headers already handle this
-3. **DO NOT redeclare any function prototypes** - All functions are already declared in the included headers
-4. **ONLY write the function implementation** - Start directly with: `int test_{project}_api_sequence() {{`
-5. **DO NOT include any #ifdef, #ifndef, or preprocessor directives** in your code
+CRITICAL CODE GENERATION RULES:
+1. DO NOT declare or redefine any types, structs, or typedefs - All types are already defined in the included library headers
+2. DO NOT use extern \"C\" blocks** - The library headers already handle this
+3. DO NOT redeclare any function prototypes** - All functions are already declared in the included headers
+4. ONLY write the function implementation** - Start directly with: `int test_{project}_api_sequence() {{`
+5. DO NOT include any #ifdef, #ifndef, or preprocessor directives** in your code
 
 Your code should ONLY contain:
 - The function signature: `int test_{project}_api_sequence()`
@@ -477,7 +477,7 @@ Your code should ONLY contain:
 - API calls
 - Return statement
 
-Below is project's specific rules:
+Below is project's specific rules, the code you generate must follow these rules:
 {project_rules}
 
 Here are some successful examples for reference:
@@ -494,7 +494,7 @@ int test_{project}_api_sequence() {{
     return 66;
 }}
 
-**Remember: DO NOT declare types, use extern blocks, or redeclare functions. Only write the function body.**
+Remember: DO NOT declare types, use extern blocks, or redeclare functions. Only write the function body.
 ";
 
 pub fn get_project_rules() -> String {
@@ -523,6 +523,21 @@ pub fn get_project_rules() -> String {
         template = template.replace("{project_rules}", "
         1. Never assign handles (cmsHANDLE, cmsMLU*, cmsToneCurve*, etc.) to integer or malloc() values. Always use official creation APIs (e.g., cmsCIECAM02Init, cmsMLUalloc).
         2. When create cmsViewingConditions, the parameter is cmsCIEXYZ* whitePoint, cmsUInt32Number  surround, not cmsCIEXYZ whitePoint
+        ");
+    }
+    if library_name=="libpng"{
+        template = template.replace("{project_rules}", "
+        1. Never declare variables of type png_info or png_struct directly (e.g., 'png_info info;' is wrong)
+        2. Always use pointer types: png_structp, png_infop
+        3. Do not use sizeof() on opaque types like png_info or png_struct
+        4. Use PNG_LIBPNG_VER_STRING (not version numbers) as the first parameter of png_create_write_struct/png_create_read_struct
+        5. CRITICAL: For png_create_write_struct/png_create_read_struct, ALWAYS pass NULL for the 3rd and 4th parameters (error/warning callbacks)
+        6. NEVER use png_error, png_warning, or png_benign_error as callback parameters - they will cause compilation errors
+        7. Example: png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL) - note all NULLs
+        8. Use png_create_info_struct() to create info structures
+        9. For png_destroy_read_struct, the 2nd and 3rd parameters must be different pointers. Use NULL for the 3rd if you only have one info_ptr
+        10. Example: png_destroy_read_struct(&png_ptr, &info_ptr, NULL) - NOT (&png_ptr, &info_ptr, &info_ptr)
+        11. Only access structures through official API functions (png_get_*, png_set_*)
         ");
     }
     template

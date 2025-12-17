@@ -425,15 +425,11 @@ impl Fuzzer {
                     log::info!("Current prompt is in CoT mode.");
                     // 生成执行计划
                     prompt.set_cot_plan_task();
-                    match self.handler.generate(&prompt) {
-                        Ok(plan_programs) => {
-                            if let Some(plan_program) = plan_programs.first() {
-                                first_prompt = plan_program.statements.clone();
-                                log::info!("Execution plan generated successfully");
-                                log::debug!("Plan:\n{}", first_prompt);
-                            } else {
-                                log::warn!("No plan generated, falling back");
-                            }
+                    match self.handler.generate_single(&prompt) {
+                        Ok(plan_program) => {
+                            first_prompt = plan_program.statements.clone();
+                            log::info!("Execution plan generated successfully");
+                            log::debug!("Plan:\n{}", first_prompt);
                         }
                         Err(e) => {
                             log::error!("CoT Phase 1 error: {}, falling back", e);
