@@ -231,7 +231,7 @@ pub struct Config {
     #[arg(long, default_value = "3")]
     pub num_new_pairs: usize,
     /// Enable Chain of Thought (CoT) mode for API combination generation. In CoT mode, LLM first generates an execution plan in natural language, then generates code based on that plan. This can improve correctness for complex libraries.
-    #[arg(long = "cot", default_value = "true")]
+    #[arg(long = "cot", default_value = "false")]
     pub enable_cot: bool,
 }
 
@@ -540,6 +540,39 @@ pub fn get_project_rules() -> String {
         11. Only access structures through official API functions (png_get_*, png_set_*)
         ");
     }
+    if library_name=="libpcap"{
+        template = template.replace("{project_rules}", "
+        1. Pay fuly attention to the double free problem
+        ");
+    }
+    if library_name=="sqlite3"{
+        template = template.replace("{project_rules}", "
+        1. Always use sqlite3_open() or sqlite3_open_v2() to open a database; never directly assign sqlite3* pointers to integers or malloc() results.
+        2. Always use sqlite3_prepare_v2() to prepare SQL statements before execution; do not reuse prepared statements (ppStmt) across different queries.
+        3. Always call sqlite3_step() to execute a prepared statement; check the return value (SQLITE_ROW, SQLITE_DONE, or error codes).
+        4. Always call sqlite3_finalize() to release prepared statements (sqlite3_stmt*) when done.
+        5. Always call sqlite3_close() or sqlite3_close_v2() to close the database connection when finished.
+        6. Do not modify sqlite3 opaque structures directly; always use official API functions (sqlite3_get_*, sqlite3_set_*, etc.).
+        7. Use sqlite3_bind_*() functions (sqlite3_bind_int, sqlite3_bind_text, etc.) to safely bind parameters to prepared statements.
+        8. Always check the return value of sqlite3_step() for error handling; do not assume success.
+        9. Do not open the same database file multiple times without closing the previous connection first.
+        10. Call sqlite3_reset() before re-executing a prepared statement with different parameters.
+        ");
+    }
+    if library_name=="cJSON"{
+        template = template.replace("{project_rules}", "
+        1. Always use official cJSON creation APIs (cJSON_CreateObject(), cJSON_CreateArray(), cJSON_CreateString(), cJSON_CreateNumber(), etc.) to create objects; never directly assign cJSON* pointers to malloc() results.
+        2. Do not directly modify cJSON structure members; use official API functions (cJSON_AddItemToObject(), cJSON_AddItemToArray(), cJSON_SetNumberValue(), etc.).
+        3. Always call cJSON_Delete() to release cJSON objects when done; this recursively frees all child objects.
+        4. Use cJSON_GetObjectItem() or cJSON_GetObjectItemCaseSensitive() to safely access object members.
+        5. Always check if the returned pointer from cJSON_GetObjectItem() is NULL before accessing its properties.
+        6. Use type-checking functions (cJSON_IsString(), cJSON_IsNumber(), cJSON_IsBool(), cJSON_IsArray(), cJSON_IsObject()) before accessing field values.
+        7. For string values, use item->valuestring; do not assume it is non-NULL without type checking.
+        8. For numeric values, use item->valuedouble or cJSON_GetNumberValue() depending on the data type.
+        9. Use cJSON_Print() or cJSON_PrintUnformatted() to serialize to string, and free the returned string with free().
+        10. Never assign the same cJSON object to multiple parents; use cJSON_Duplicate() to create a copy if needed.
+        ");
+    }
     template
 }
 pub const RAW_RULE: &str = "
@@ -572,6 +605,35 @@ pub fn get_raw_project_rules() -> String {
         4. When generating or modifying IT8/CGATS inputs, always ensure the memory buffer length is greater than 0 (len > 0) and include a valid file header (e.g., CGATS or IT8) to avoid triggering cmsIT8LoadFromMem assertions.
         ");
     }
+    if library_name=="sqlite3"{
+        template = template.replace("{project_rules}", "
+        1. Always use sqlite3_open() or sqlite3_open_v2() to open a database; never directly assign sqlite3* pointers to integers or malloc() results.
+        2. Always use sqlite3_prepare_v2() to prepare SQL statements before execution; do not reuse prepared statements (ppStmt) across different queries.
+        3. Always call sqlite3_step() to execute a prepared statement; check the return value (SQLITE_ROW, SQLITE_DONE, or error codes).
+        4. Always call sqlite3_finalize() to release prepared statements (sqlite3_stmt*) when done.
+        5. Always call sqlite3_close() or sqlite3_close_v2() to close the database connection when finished.
+        6. Do not modify sqlite3 opaque structures directly; always use official API functions (sqlite3_get_*, sqlite3_set_*, etc.).
+        7. Use sqlite3_bind_*() functions (sqlite3_bind_int, sqlite3_bind_text, etc.) to safely bind parameters to prepared statements.
+        8. Always check the return value of sqlite3_step() for error handling; do not assume success.
+        9. Do not open the same database file multiple times without closing the previous connection first.
+        10. Call sqlite3_reset() before re-executing a prepared statement with different parameters.
+        ");
+    }
+    if library_name=="cJSON"{
+        template = template.replace("{project_rules}", "
+        1. Always use official cJSON creation APIs (cJSON_CreateObject(), cJSON_CreateArray(), cJSON_CreateString(), cJSON_CreateNumber(), etc.) to create objects; never directly assign cJSON* pointers to malloc() results.
+        2. Do not directly modify cJSON structure members; use official API functions (cJSON_AddItemToObject(), cJSON_AddItemToArray(), cJSON_SetNumberValue(), etc.).
+        3. Always call cJSON_Delete() to release cJSON objects when done; this recursively frees all child objects.
+        4. Use cJSON_GetObjectItem() or cJSON_GetObjectItemCaseSensitive() to safely access object members.
+        5. Always check if the returned pointer from cJSON_GetObjectItem() is NULL before accessing its properties.
+        6. Use type-checking functions (cJSON_IsString(), cJSON_IsNumber(), cJSON_IsBool(), cJSON_IsArray(), cJSON_IsObject()) before accessing field values.
+        7. For string values, use item->valuestring; do not assume it is non-NULL without type checking.
+        8. For numeric values, use item->valuedouble or cJSON_GetNumberValue() depending on the data type.
+        9. Use cJSON_Print() or cJSON_PrintUnformatted() to serialize to string, and free the returned string with free().
+        10. Never assign the same cJSON object to multiple parents; use cJSON_Duplicate() to create a copy if needed.
+        ");
+    }
+
     template
 }
 pub fn get_sys_gen_template() -> &'static str {
