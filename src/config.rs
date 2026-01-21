@@ -523,6 +523,9 @@ pub fn get_project_rules() -> String {
         template = template.replace("{project_rules}", "
         1. Never assign handles (cmsHANDLE, cmsMLU*, cmsToneCurve*, etc.) to integer or malloc() values. Always use official creation APIs (e.g., cmsCIECAM02Init, cmsMLUalloc).
         2. When create cmsViewingConditions, the parameter is cmsCIEXYZ* whitePoint, cmsUInt32Number  surround, not cmsCIEXYZ whitePoint
+        3. cmsToneCurve Curve[3] will cause error, you should use offical API to build
+        4. When generating or modifying IT8/CGATS inputs, always ensure the memory buffer length is greater than 0 (len > 0) and include a valid file header (e.g., CGATS or IT8) to avoid triggering cmsIT8LoadFromMem assertions.
+        5. Example IT8 style: const char* data = IT8.7/1\nDESCRIPTOR \"D\"\nORIGINATOR \"O\"\nKEY;
         ");
     }
     if library_name=="libpng"{
@@ -603,6 +606,7 @@ pub fn get_raw_project_rules() -> String {
         2. When create cmsViewingConditions, the parameter is cmsCIEXYZ* whitePoint, cmsUInt32Number  surround, not cmsCIEXYZ whitePoint
         3. cmsToneCurve Curve[3] will cause error, you should use offical API to build
         4. When generating or modifying IT8/CGATS inputs, always ensure the memory buffer length is greater than 0 (len > 0) and include a valid file header (e.g., CGATS or IT8) to avoid triggering cmsIT8LoadFromMem assertions.
+        5. Example IT8 style: const char* data = IT8.7/1\nDESCRIPTOR \"D\"\nORIGINATOR \"O\"\nKEY;
         ");
     }
     if library_name=="sqlite3"{
