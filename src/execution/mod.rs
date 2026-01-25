@@ -385,16 +385,21 @@ impl Executor {
         profdata: &Path,
     ) -> Result<()> {
         let core_dir = get_file_dirname(core_binary);
-        let profraw_file: PathBuf = [core_dir.clone(), "core.profraw".into()].iter().collect();
-        
-        // Remove existing profraw file if it exists
-        if profraw_file.exists() {
-            std::fs::remove_file(&profraw_file)?;
+        // Remove existing profraw files if they exist
+        if core_dir.exists() {
+            for entry in std::fs::read_dir(&core_dir)? {
+                let path = entry?.path();
+                if path.is_file() && path.extension().is_some() && path.extension().unwrap() == "profraw" {
+                    std::fs::remove_file(path)?;
+                }
+            }
         }
-        
+
+        let profraw_pattern: PathBuf = [core_dir.clone(), "core.%m.profraw".into()].iter().collect();
+
         // Run the CNTG core with coverage
         let output = Command::new(core_binary)
-            .env("LLVM_PROFILE_FILE", &profraw_file)
+            .env("LLVM_PROFILE_FILE", &profraw_pattern)
             .output()?;
         
         if !output.status.success() {
@@ -404,12 +409,25 @@ impl Executor {
         }
         
         // Convert profraw to profdata
-        let profraws = vec![profraw_file];
+        let mut profraws = Vec::new();
+        for entry in std::fs::read_dir(&core_dir)? {
+            let path = entry?.path();
+            if path.is_file() && path.extension().is_some() && path.extension().unwrap() == "profraw" {
+                profraws.push(path);
+            }
+        }
+
+        if profraws.is_empty() {
+            eyre::bail!("No profraw files generated for {core_binary:?}");
+        }
+
         Self::merge_profdata(&profraws, profdata)?;
-        
-        // Clean up the profraw file
+
+        // Clean up the profraw files
         if profdata.exists() {
-            std::fs::remove_file(&profraws[0])?;
+            for profraw in profraws {
+                let _ = std::fs::remove_file(profraw);
+            }
         }
         Ok(())
     }

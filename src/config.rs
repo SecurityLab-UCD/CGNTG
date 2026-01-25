@@ -70,8 +70,9 @@ pub const COVERAGE_FLAGS: [&str; 9] = [
     "-Wno-unused-command-line-argument",
     "-ftrivial-auto-var-init=zero",
 ];
-pub const COVERAGE_FLAGS_NO_FUZZ: [&str; 8] = [
+pub const COVERAGE_FLAGS_NO_FUZZ: [&str; 9] = [
     "-g",
+    "-fsanitize=address",
     "-fprofile-instr-generate",
     "-fcoverage-mapping",
     "-Wl,--no-as-needed",
@@ -188,7 +189,7 @@ pub struct Config {
     /// The target project you decide to fuzz. Available: ["cJSON", "c-ares", "libvpx", "libaom", "libpng", "cre2", "curl", "lcms", "libjpeg-turbo", "libmagic", "libtiff", "sqlite3", "zlib", "libpcap"]
     pub target: String,
     /// Sample N outputs per LLM's request, max: 128
-    #[arg(short, long, default_value = "10")]
+    #[arg(short, long, default_value = "1")]
     pub n_sample: u8,
     /// Sampling temperature. Higher values means the model will take more risks. Try 1 for more creative applications, and 0 (argmax sampling) for ones with a well-defined answer.
     #[arg(short, long, default_value = "1")]
@@ -314,21 +315,7 @@ pub const SYSTEM_API_TEMPLATE: &str = "Act as an API usage synthesizer. Generate
 
 /// Template of providing the context of library's structures. 
 pub const SYSTEM_CONTEXT_TEMPLATE: &str = "
-The fuzz dirver should focus on the usage of the {project} library, and several essential aspects of the library are provided below.
-Here are the system headers included in {project}. You can utilize the public elements of these headers:
-----------------------
-{headers}
-----------------------
 
-Here are the APIs exported from {project}. You are encouraged to use any of the following APIs once you need to create, initialize or destory variables:
-----------------------
-{APIs}
-----------------------
-
-Here are the custom types declared in {project}. Ensure that the variables you use do not violate declarations:
-----------------------
-{context}
-----------------------
 ";
 pub const ERROR_REPAIR_TEMPLATE: &str =
 "The previous attempt to generate code failed with the following error:
@@ -344,59 +331,11 @@ Do not include if branches or loops; the function should be a straight-line sequ
 pub const USER_API_TEMPLATE: &str = "Your task is to write a complete, logically correct C++ function named `int test_{project}_api_sequence()` using the {project} library.
 
 The API sequence should focus on the usage of the {project} library, and several essential aspects of the library are provided below.
+Please return 66 finally if succeed
 
-Here are the system headers included in {project}. You can utilize the public elements of these headers:
-----------------------
-{headers}
-----------------------
-
-Here are the APIs exported from {project}. You are encouraged to use any of the following APIs once you need to create, initialize or destroy variables:
-----------------------
-{APIs}
-----------------------
-
-Here are the custom types declared in {project}. Ensure that the variables you use do not violate declarations:
-----------------------
-{context}
-----------------------
-
-Use the following APIs in your function:
-{combinations}
-Here are some successful examples:
-{successful_examples}
-Function Requirements:
-1. The function must return `66` on success.  
-2. Do not include if branches or loops; the function should be a straight-line sequence of API calls.
-3. You must not redefine or include the {project} library.  
-4. Do not use `std::memset`; use plain `memset`.  do not create new functions, use the existing APIs.
-5. The function must end with:
-   API sequence test completed successfully
-6. When you enter a new phase, use `// step ...` to indicate the phase. different operations are in different steps, steps cannot exceed 4
-
-Below is project's specific rules:
-{project_rules}
-
-Code Quality Rules:
-- The function must be self-contained: declare, initialize, and clean up all variables and resources.
-- The API sequence should follow a realistic and complete usage pattern:
-  - Initialize → Configure → Operate → Validate → Cleanup
-- Ensure that data flows meaningfully between API calls (no dummy or unused variables).
-- Do not use placeholders like `// your code here`.
-- No comments needed — just clean and understandable code.
-- If you have to write any helper functions, begin them with static
-Output Instructions:
-
-Only output the function body `int test_{project}_api_sequence() { ... }`  
-No `#include` directives or `main()` function.
-
-Example Outline:
 ```cpp
 int test_{project}_api_sequence() {
-    // Step 1: Declarations
-    // Step 2: Setup
-    // Step 3: Core operations
-    // Step ...
-    // step ... : Cleanup
+    
     return 66;
 }
 ```";

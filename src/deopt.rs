@@ -40,12 +40,7 @@ impl Deopt {
 
     pub fn select_seed_from_queue(&mut self) -> &Program {
         assert!(!self.seed_queue.is_empty());
-        let qualities: Vec<f32> = self
-            .seed_queue
-            .iter()
-            .map(|seed| seed.get_weight())
-            .collect();
-        let choose = crate::program::rand::weighted_choose(qualities);
+        let choose = rand::random::<usize>() % self.seed_queue.len();
         self.seed_queue[choose].increase_visited();
         let program = &self.seed_queue[choose];
         self.save_program(program).unwrap();
@@ -64,8 +59,7 @@ impl Deopt {
             .iter_mut()
             .filter(|x| x.id != seed.id)
             .collect();
-        let qualities: Vec<f32> = seed_queue.iter().map(|seed| seed.get_weight()).collect();
-        let choose = crate::program::rand::weighted_choose(qualities);
+        let choose = rand::random::<usize>() % seed_queue.len();
         seed_queue[choose].increase_visited();
         let select = seed_queue[choose].id;
         let program = self.get_seed_from_queue(select);

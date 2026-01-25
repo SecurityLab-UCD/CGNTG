@@ -177,6 +177,8 @@ impl Prompt {
             log::trace!("System role: {sys_msg}");
             let user_msg = config::get_user_chat_template()
                 .replace("{combinations}", &combination_to_str(&self.gadgets));
+            log::info!("System Prompt:\n{}", sys_msg);
+            log::info!("User Prompt:\n{}", user_msg);
             let sys_msg = ChatCompletionRequestSystemMessageArgs::default()
                 .content(sys_msg)
                 .build()
@@ -266,7 +268,8 @@ impl Prompt {
                         .replace("{error_details}", &error_details_str)
                 }
             };
-            log::debug!("user Prompt:{:?}\n", user_msg_content);
+            log::info!("System Prompt:\n{}", sys_msg);
+            log::info!("User Prompt:\n{}", user_msg_content);
             // let user_msg = config::get_user_gen_template()
             //     .replace("{combinations}", &combination_to_str(&self.gadgets))
             //     .replace("{successful_examples}", &successful_examples); // **注入样例**

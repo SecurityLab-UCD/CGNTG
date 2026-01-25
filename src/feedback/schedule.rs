@@ -6,7 +6,7 @@ use crate::{
     deopt::Deopt, minimize, mutation::mutate_prompt, program::{
         gadget::{FuncGadget, get_func_gadget, get_func_gadgets},
         get_exec_counter_value, load_exec_counter,
-        rand::{prob_coin, rand_comb_len, weighted_choose},
+        rand::{prob_coin, rand_comb_len, random_select},
         set_exec_counter_value,
     }, request::prompt::{
         Prompt, get_prompt_counter_value, load_prompt_counter, set_prompt_counter_value
@@ -290,18 +290,12 @@ impl Schedule {
 
     pub fn choose_api_by_energy(&self) -> &str {
         let values: Vec<&Seed> = self.seeds.values().collect();
-        let energies: Vec<f32> = values.iter().map(|x| x.sampling_weight).collect();
-        let choose = weighted_choose(energies);
-        let mut choose_seed = values[choose];
-        
-  
-        let max_prob = 0.3_f32;
-        let steepness = 0.1_f32; 
-        let midpoint = 50.0_f32; 
+        let mut choose_seed = *random_select(&values);
+
         println!("loop count: {}", self.loop_count);
-      //  let replace_with_lowest_prob = max_prob / (1.0 + E.powf(steepness * (self.loop_count as f32 - midpoint)));
+        //  let replace_with_lowest_prob = max_prob / (1.0 + E.powf(steepness * (self.loop_count as f32 - midpoint)));
         let replace_with_lowest_prob = 0_f32;
-        
+
         if prob_coin(replace_with_lowest_prob) {
             let mut min_energy = f32::MAX;
             for seed in &values {
@@ -310,23 +304,15 @@ impl Schedule {
                     choose_seed = seed;
                 }
             }
-            log::info!("Loop {}: Replaced with lowest energy API: {} (energy: {}), prob: {:.4}", 
+            log::info!("Loop {}: Replaced with lowest energy API: {} (energy: {}), prob: {:.4}",
                     self.loop_count, choose_seed.name, choose_seed.energy, replace_with_lowest_prob);
         }
         &choose_seed.name
     }
 
     pub fn choose_low_energy_api(&self, combination: &Vec<String>) -> usize {
-        let mut energies: Vec<f32> = Vec::new();
-        for api_name in combination {
-            let energy = self
-                .seeds
-                .get(api_name)
-                .unwrap_or_else(|| panic!("no seed named {api_name} in Schedule"))
-                .energy;
-            energies.push(energy);
-        }
-        weighted_choose(energies)
+        let indices: Vec<usize> = (0..combination.len()).collect();
+        *random_select(&indices)
     }
 }
 
